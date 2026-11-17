@@ -1,5 +1,5 @@
 'use strict';
-/* Coffee Brewing — bean-first brew log. Everything lives in localStorage for now. */
+/* Coffee Brewing — bean-first brew log. Saved in localStorage; sync.js mirrors it to the cloud when signed in. */
 
 const KEY = 'coffee-pwa-v1';
 
@@ -88,9 +88,13 @@ function load() {
   try { return Object.assign(blank(), JSON.parse(localStorage.getItem(KEY)) || {}); } catch (e) { return blank(); }
 }
 let S = load();
-function save() { S.updatedAt = Date.now(); try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { toast('Storage is full'); } }
+function save() {
+  S.updatedAt = Date.now();
+  try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { toast('Storage is full'); }
+  if (window.Cloud) Cloud.changed();
+}
 
-const DR = { B: null, G: null, R: null, D: null, Q: null }; // drafts being edited
+const DR = { B: null, G: null, R: null, D: null, Q: null, U: null }; // drafts being edited (U = sign-in form)
 let T = null;   // timer
 let SH = null;  // open sheet
 
@@ -408,10 +412,30 @@ function vGear() {
     '<button class="btn ghost" data-a="newGrinder">' + I(IC.plus) + 'Grinder</button></div>';
   h += '<div class="stack"><div class="label">My drippers</div><div class="g3">' +
     DRIPPERS.map((d) => { const on = S.owned.indexOf(d.id) >= 0; return '<button class="tile icon ' + (on ? 'own' : 'off') + '" data-a="own" data-v="' + d.id + '" aria-pressed="' + on + '">' + SV(d.svg) + d.name + '</button>'; }).join('') + '</div></div>';
-  h += '<div class="stack"><div class="label">Backup</div><div class="small muted">Data stays on this device. Export before switching phones.</div>' +
+  h += vAccount();
+  const synced = window.Cloud && Cloud.user();
+  h += '<div class="stack"><div class="label">Backup</div><div class="small muted">' + (synced ? 'Your log syncs to your account. Export also saves a JSON copy.' : 'Data stays on this device. Export before switching phones.') + '</div>' +
     '<div class="g2"><button class="btn sm ghost" data-a="exportData">Export</button><button class="btn sm ghost" data-a="importData">Import</button></div>' +
     '<input type="file" id="imp" accept="application/json,.json" hidden></div>';
   return h;
+}
+
+function vAccount() {
+  if (!window.Cloud || !Cloud.enabled()) return '';
+  const u = Cloud.user();
+  let h = '<div class="stack"><div class="label">Account</div>';
+  if (u) {
+    DR.U = null;
+    return h + '<div class="card"><div style="min-width:0"><h2 class="one">' + esc(u.email) + '</h2><div class="small muted" id="sync-status" role="status">' + esc(Cloud.status()) + '</div></div>' +
+      '<div class="g2"><button class="btn sm ghost" data-a="syncNow">Sync now</button><button class="btn sm ghost" data-a="signOut">Sign out</button></div></div></div>';
+  }
+  const U = DR.U || (DR.U = { email: '', code: '', step: 'email' });
+  if (U.step === 'code') {
+    return h + '<div class="small muted">We emailed a code to ' + esc(U.email) + '.</div>' + field('U', 'code', 'Code', { mode: 'numeric', ph: '123456' }) +
+      '<div class="g2"><button class="btn sm ghost" data-a="codeBack">Back</button><button class="btn sm" data-a="verifyCode">Sign in</button></div></div>';
+  }
+  return h + '<div class="small muted">Sign in to keep your log in the cloud and use it on more than one device.</div>' + field('U', 'email', 'Email', { type: 'email', ph: 'you@example.com' }) +
+    '<button class="btn sm" data-a="sendCode">Email me a code</button></div>';
 }
 
 function vGrinder() {
@@ -753,7 +777,24 @@ const A = {
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   },
-  importData: () => { const i = document.getElementById('imp'); if (i) i.click(); }
+  importData: () => { const i = document.getElementById('imp'); if (i) i.click(); },
+  sendCode: async (d, el) => {
+    const U = DR.U, email = String(U.email || '').trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { toast('Enter your email'); const f = document.getElementById('f-email'); if (f) f.focus(); return; }
+    if (el) el.disabled = true;
+    try { await Cloud.sendCode(email); U.email = email; U.code = ''; U.step = 'code'; rerender(); const f = document.getElementById('f-code'); if (f) f.focus(); }
+    catch (e) { toast((e && e.message) || 'Couldn’t send the code'); if (el) el.disabled = false; }
+  },
+  verifyCode: async (d, el) => {
+    const U = DR.U, code = String(U.code || '').replace(/\s/g, '');
+    if (!code) { toast('Enter the code'); return; }
+    if (el) el.disabled = true;
+    try { await Cloud.verify(U.email, code); toast('Signed in'); }
+    catch (e) { toast('That code didn’t work'); if (el) el.disabled = false; }
+  },
+  codeBack: () => { DR.U.step = 'email'; rerender(); },
+  syncNow: () => Cloud.sync(),
+  signOut: () => sheet({ title: 'Sign out? Your log stays on this phone.', ok: 'Sign out', cb: () => Cloud.signOut() })
 };
 
 document.addEventListener('click', (e) => {
@@ -764,6 +805,8 @@ document.addEventListener('click', (e) => {
 });
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && e.target.id === 'sheet-in') A.sheetOk();
+  if (e.key === 'Enter' && e.target.id === 'f-email' && DR.U) A.sendCode();
+  if (e.key === 'Enter' && e.target.id === 'f-code' && DR.U) A.verifyCode();
   if (e.key === 'Escape' && SH) closeSheet();
 });
 document.addEventListener('input', (e) => {
@@ -789,3 +832,4 @@ document.addEventListener('change', (e) => {
 window.addEventListener('hashchange', render);
 document.addEventListener('visibilitychange', () => { if (!document.hidden && T) paintTimer(); });
 render();
+if (window.Cloud) Cloud.init();
