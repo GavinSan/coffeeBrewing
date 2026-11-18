@@ -1,0 +1,42 @@
+const BASE = process.env.BASE || BASE;
+const { chromium, devices } = require('playwright');
+let fails = 0; const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails++; };
+(async () => {
+  const b = await chromium.launch();
+  const ctx = await b.newContext({ ...devices['iPhone 13'], serviceWorkers: 'block' });
+  await ctx.route('**/config.js', (r) => r.fulfill({ contentType: 'text/javascript', body: "window.COFFEE_CLOUD={url:'https://x.supabase.co',key:''};" }));
+  const p = await ctx.newPage(); const errs = [];
+  p.on('pageerror', (e) => errs.push(e.message));
+  await p.addInitScript(() => {
+    if (localStorage.getItem('coffee-pwa-v1')) return;
+    const now = Date.now(), d = (ms) => new Date(ms).toISOString().slice(0, 10);
+    const brew = (id, at, stars) => ({ id, beanId: 'b1', at, date: d(at), method: 'pour', dripper: 'v60', filter: 'White paper', recipeId: '46', dose: 15, ratio: 16, temp: 93, grind: 24, elapsed: 200, stars, ratedAt: stars ? 1 : 0, r: null, adjust: '' });
+    localStorage.setItem('coffee-pwa-v1', JSON.stringify({ beans: [{ id: 'b1', name: 'Kenya', roaster: 'Sey', weight: 250, price: 25, notes: [], roast: 2, buyDate: d(now) }],
+      brews: [brew('w1', now - 3 * 864e5, 4), brew('w2', now - 2 * 864e5, 3), brew('w3', now - 864e5, 5), brew('w4', now - 60000, 0)], grinders: [], owned: [], recipes: [], filters: [], flavors: [], processes: [], countdown: 3, updatedAt: 1 }));
+  });
+  const count = () => p.evaluate(() => JSON.parse(localStorage.getItem('coffee-pwa-v1')).brews.length);
+  await p.goto(BASE + '#journal');
+  await p.click('.row[data-id=w2]'); await p.waitForSelector('h1:text("How was it?")');
+  await p.click('[data-a=delBrew]');
+  ok(/Delete this brew of Kenya/.test(await p.textContent('#sheet h2')), 'confirm sheet names the bag');
+  await p.click('#sheet [data-a=sheetX]');
+  ok(await count() === 4, 'cancel keeps the brew');
+  await p.click('[data-a=delBrew]'); await p.click('#sheet [data-a=sheetOk]');
+  await p.waitForSelector('h1:text("Journal")');
+  ok(await count() === 3, 'deleted from journal → back on journal');
+  await p.goto(BASE + '#bean/b1'); await p.waitForSelector('text=Best cup');
+  const before = await p.locator('.list .row').count();
+  await p.click('.row[data-id=w1]'); await p.waitForSelector('[data-a=delBrew]');
+  await p.click('[data-a=delBrew]'); await p.click('#sheet [data-a=sheetOk]');
+  await p.waitForSelector('text=Best cup');
+  ok(await p.locator('.list .row').count() === before - 1 && await count() === 2, 'deleted from bean page, list updates');
+  await p.goto(BASE + '#brew');
+  ok(await p.locator('.banner').count() === 1, 'home has rate prompt for unrated brew');
+  await p.click('.banner [data-a=rate]'); await p.click('[data-a=delBrew]'); await p.click('#sheet [data-a=sheetOk]');
+  await p.waitForSelector('h1:text("Brew")');
+  ok(await p.locator('.banner').count() === 0 && await count() === 1, 'deleting from rate prompt clears it');
+  await p.screenshot({ path: require('path').join(__dirname, '..', 'test-results', 'delete.png') });
+  ok(errs.length === 0, 'no page errors ' + errs.join('|'));
+  await b.close(); console.log(fails ? fails + ' FAILED' : 'ALL PASSED');
+  process.exit(fails ? 1 : 0);
+})();
