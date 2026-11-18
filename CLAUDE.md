@@ -28,3 +28,5 @@ npm test -- gear.test.js    # one suite
 - Top-level `const`/`let` in one classic script aren't on `window`: `sync.js` exposes `window.Cloud` on purpose.
 - Anything `load()`/`migrate()` calls must be defined above `let S = load()`.
 - Old saves must keep loading: change the state shape only together with `migrate()` and a test.
+- CSS custom properties on `:root` share one namespace: `--soft` is a colour, easing lives in `--ease` / `--spring`. Reusing a name silently turns every `var()` user transparent (`tests/styles.test.js` guards this).
+- Painted scenes (`scene()` in `app.js`) are original art in a hand-painted style; keep them free of any studio's characters, and keep text and icons plain.

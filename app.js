@@ -133,6 +133,62 @@ const STAR_S = '<svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 2
 const CHEV = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.500" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
 const CUP = '<svg aria-hidden="true" width="64" height="64" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 18h24v10a10 10 0 0 1-10 10h-4a10 10 0 0 1-10-10z"/><path d="M34 21h3a4 4 0 0 1 0 8h-3"/><path class="steam" d="M16 13c0-2 2-2.500 2-4.500s-2-2.500-2-4.500"/><path class="steam s2" d="M22 13c0-2 2-2.500 2-4.500s-2-2.500-2-4.500"/><path class="steam s3" d="M28 13c0-2 2-2.500 2-4.500s-2-2.500-2-4.500"/></svg>';
 
+// ---------- painted scenes ----------
+// Hand-painted look: big cumulus clouds, rolling hills, wind in the grass. The sky follows the time of day.
+function skyNow() {
+  const h = new Date().getHours();
+  if (h >= 5 && h < 9) return { k: 'dawn', top: '#F2B98F', bot: '#FCE8CF', far: '#B5C796', near: '#7FA563', sun: '#FFE7B8', cloud: '#FFF6EA', shade: '#F3D3BE' };
+  if (h >= 9 && h < 17) return { k: 'day', top: '#7DB9E6', bot: '#D9EEF8', far: '#A3CB8E', near: '#64994F', sun: '#FFF6DA', cloud: '#FFFFFF', shade: '#D6E3EF' };
+  if (h >= 17 && h < 20) return { k: 'dusk', top: '#B98AB0', bot: '#F8C38F', far: '#9AAA80', near: '#617F4B', sun: '#FFD79A', cloud: '#FFE9DA', shade: '#E2B3A8' };
+  return { k: 'night', top: '#1B2647', bot: '#3F527C', far: '#2F4458', near: '#203646', sun: '#F3EAC4', cloud: '#55627F', shade: '#3B4766' };
+}
+let sceneN = 0;
+function cloud(x, y, sc, c, dur, delay) {
+  const blob = (dx, dy, f) => [[0, 8, 14], [16, 3, 18], [34, 6, 15], [48, 10, 11]].map((q) => '<circle cx="' + (q[0] + dx) + '" cy="' + (q[1] + dy) + '" r="' + q[2] + '" fill="' + f + '"/>').join('');
+  return '<g class="cl" style="animation-duration:' + dur + 's;animation-delay:-' + delay + 's"><g transform="translate(' + x + ' ' + y + ') scale(' + sc + ')">' +
+    blob(2, 4, c.shade) + '<rect x="-2" y="10" width="54" height="12" rx="6" fill="' + c.shade + '"/>' + blob(0, 0, c.cloud) + '<rect x="-4" y="8" width="54" height="10" rx="5" fill="' + c.cloud + '"/></g></g>';
+}
+function scene(o) {
+  o = o || {};
+  const c = skyNow(), n = ++sceneN, night = c.k === 'night';
+  // tall: extra sky above for full-screen use; the painting keeps its proportions and sits at the bottom
+  const top = o.tall ? -230 : 0;
+  let h = '<div class="scene ' + c.k + (o.cls ? ' ' + o.cls : '') + '" aria-hidden="true"' + (o.tall ? ' style="background:' + c.top + '"' : '') + '><svg viewBox="0 ' + top + ' 360 ' + (150 - top) + '" preserveAspectRatio="' + (o.tall ? 'xMidYMax meet' : 'xMidYMax slice') + '">' +
+    '<defs><linearGradient id="sk' + n + '" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="' + c.top + '"/><stop offset="1" stop-color="' + c.bot + '"/></linearGradient>' +
+    '<radialGradient id="gl' + n + '"><stop offset="0" stop-color="' + c.sun + '" stop-opacity=".9"/><stop offset="1" stop-color="' + c.sun + '" stop-opacity="0"/></radialGradient>' +
+    '<linearGradient id="wd' + n + '" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#C08F62"/><stop offset="1" stop-color="#8E6340"/></linearGradient></defs>' +
+    '<rect y="' + top + '" width="360" height="' + (150 - top) + '" fill="url(#sk' + n + ')"/>';
+  if (night) {
+    [[30, 22], [70, 40], [118, 16], [160, 34], [205, 12], [236, 46], [320, 22], [345, 52], [92, 60], [185, 58]].forEach((q, i) => {
+      h += '<circle class="star" style="animation-delay:-' + (i * 0.7).toFixed(1) + 's" cx="' + q[0] + '" cy="' + q[1] + '" r="' + (i % 3 ? 1.1 : 1.6) + '" fill="#FFF8DC"/>';
+    });
+    h += '<circle class="glow" cx="288" cy="' + (o.tall ? -150 : 58) + '" r="34" fill="url(#gl' + n + ')"/><circle cx="288" cy="' + (o.tall ? -150 : 58) + '" r="14" fill="' + c.sun + '"/><circle cx="294" cy="' + (o.tall ? -155 : 53) + '" r="12" fill="' + c.top + '" opacity=".92"/>';
+  } else {
+    h += '<circle class="glow" cx="288" cy="' + (o.tall ? -150 : 60) + '" r="40" fill="url(#gl' + n + ')"/><circle cx="288" cy="' + (o.tall ? -150 : 60) + '" r="15" fill="' + c.sun + '"/>';
+  }
+  h += cloud(0, 44, 1.5, c, 95, 20) + cloud(0, 66, 1, c, 70, 45) + cloud(0, 30, 0.85, c, 120, 95);
+  if (o.tall) h += cloud(0, -190, 1.7, c, 110, 60) + cloud(0, -110, 1.2, c, 85, 10) + cloud(0, -40, 1.4, c, 130, 80);
+  if (!night) h += '<g class="bird"><path d="M0 0q4-5 8 0q4-5 8 0" fill="none" stroke="#3B3A44" stroke-width="1.6" stroke-linecap="round"/></g>';
+  h += '<path d="M0 104Q50 84 110 96T230 90T360 100V150H0Z" fill="' + c.far + '"/>' +
+    '<path d="M0 126Q70 104 160 116T360 112V150H0Z" fill="' + c.near + '"/>';
+  // coffee shrub with ripe cherries
+  h += '<g transform="translate(300 98)"><path d="M10 26V8M10 16l-7-6M10 12l8-7" stroke="#6B4A2E" stroke-width="2" stroke-linecap="round" fill="none"/>' +
+    [[-2, 6, -30], [4, -2, 20], [14, -4, -15], [22, 4, 35], [8, 8, 0], [16, 12, 25], [0, 14, -20]].map((q, i) => '<ellipse cx="' + q[0] + '" cy="' + q[1] + '" rx="7" ry="4" transform="rotate(' + q[2] + ' ' + q[0] + ' ' + q[1] + ')" fill="' + (night ? (i % 2 ? '#1E3A2E' : '#26473A') : (i % 2 ? '#3E6E3A' : '#4F8A47')) + '"/>').join('') +
+    [[6, 10], [12, 6], [18, 12], [3, 3], [14, 15]].map((q) => '<circle cx="' + q[0] + '" cy="' + q[1] + '" r="2.4" fill="' + (night ? '#8E3A30' : '#D2452F') + '"/>').join('') + '</g>';
+  [[150, 117], [182, 115], [214, 114], [250, 113], [120, 120], [340, 112]].forEach((q, i) => {
+    h += '<path class="gr" style="animation-delay:-' + (i * 0.6).toFixed(1) + 's" d="M' + q[0] + ' ' + q[1] + 'q-2-7-5-10M' + q[0] + ' ' + q[1] + 'q0-8 1-12M' + q[0] + ' ' + q[1] + 'q2-6 6-9" stroke="' + (night ? '#3D5A52' : '#4C8040') + '" stroke-width="1.5" fill="none" stroke-linecap="round"/>';
+  });
+  if (o.cup) {
+    h += '<rect x="0" y="134" width="360" height="16" fill="url(#wd' + n + ')"/><path d="M0 134H360" stroke="#7A5233" stroke-width="1.5"/>' +
+      '<g transform="translate(42 104)"><path class="steam" d="M10 -4c-3-5 3-8 0-13s3-8 0-12" stroke="#FFFFFF" stroke-width="2" fill="none" stroke-linecap="round"/>' +
+      '<path class="steam s2" d="M18 -4c-3-5 3-8 0-13s3-8 0-12" stroke="#FFFFFF" stroke-width="2" fill="none" stroke-linecap="round"/>' +
+      '<path d="M0 4h28v12a10 10 0 0 1-10 10h-8A10 10 0 0 1 0 16z" fill="#FFFDF8" stroke="#5A3A22" stroke-width="1.6"/>' +
+      '<ellipse cx="14" cy="5" rx="13" ry="3" fill="#6F4423"/><path d="M28 8h3a5 5 0 0 1 0 10h-3" fill="none" stroke="#5A3A22" stroke-width="1.6"/>' +
+      '<ellipse cx="15" cy="30" rx="20" ry="2.5" fill="#5A3A22" opacity=".25"/></g>';
+  }
+  return h + '</svg></div>';
+}
+
 // ---------- state ----------
 function blank() { return { beans: [], brews: [], gear: [], grinders: [], recipes: [], recipeOver: {}, filters: [], flavors: [], processes: [], countdown: 3, setupSeen: false, updatedAt: 0 }; }
 // older saves kept owned drippers as a list of ids ("owned"); turn them into gear
@@ -368,7 +424,7 @@ function vHome() {
       '<div class="g2"><button class="btn sm ghost" data-a="skipSetup">Not now</button><button class="btn sm" data-a="go" data-v="setup">Set up gear</button></div></div>';
   }
   if (!S.beans.length) {
-    h += '<div class="card welcome">' + CUP + '<h2>Start with a bag of beans</h2><div class="muted">Add what you’re brewing. Each cup then tracks cost, freshness and how it tasted.</div>' +
+    h += '<div class="card welcome">' + scene({ cup: true }) + '<h2>Start with a bag of beans</h2><div class="muted">Add what you’re brewing. Each cup then tracks cost, freshness and how it tasted.</div>' +
       '<button class="btn" data-a="newBean">' + I(IC.plus) + 'Add a bag</button></div>';
     if (!S.grinders.length) h += '<button class="link" data-a="newGrinder">Add your grinder</button>';
     return h;
@@ -376,7 +432,7 @@ function vHome() {
   const open = S.beans.filter((b) => !b.finishDate).sort((x, y) => lastUsed(y) - lastUsed(x));
   if (!open.length) {
     const recent = S.beans.slice().sort((x, y) => lastUsed(y) - lastUsed(x)).slice(0, 4);
-    return h + '<div class="card welcome">' + CUP + '<h2>Out of beans</h2><div class="muted">Every bag is finished. Add a new one, or buy one you liked again.</div>' +
+    return h + '<div class="card welcome">' + scene({ cup: true }) + '<h2>Out of beans</h2><div class="muted">Every bag is finished. Add a new one, or buy one you liked again.</div>' +
       '<button class="btn" data-a="newBean">' + I(IC.plus) + 'Add a bag</button></div>' +
       '<div class="stack"><div class="label">Buy again</div><div class="list">' + recent.map((b) => beanRow(b, { act: 'buyAgain' })).join('') + '</div></div>';
   }
@@ -387,7 +443,7 @@ function vHome() {
 }
 function heroCard(b) {
   const w = lastBrew(b.id), d = days(b.roastDate, today()), wt = num(b.weight);
-  let h = '<div class="card hero"><div class="rowb" style="align-items:flex-start"><button class="titlebtn" data-a="openBean" data-id="' + b.id + '">' +
+  let h = '<div class="card hero">' + scene({ cup: true, cls: 'band' }) + '<div class="rowb" style="align-items:flex-start"><button class="titlebtn" data-a="openBean" data-id="' + b.id + '">' +
     '<div class="small muted">' + (w ? 'Up next' : 'New bag') + '</div><h2 class="one">' + esc(b.name) + '</h2><div class="small muted one">' + esc([b.roaster, b.origin].filter(Boolean).join(' · ') || 'Tap to add details') + '</div></button>' +
     (d != null ? '<div class="tag" title="Days since roast">Day ' + d + '</div>' : '') + '</div>';
   if (wt) {
@@ -407,7 +463,7 @@ function heroCard(b) {
 function vBeans() {
   const open = S.beans.filter((b) => !b.finishDate).length;
   let h = head('Beans', S.beans.length ? open + ' open · ' + (S.beans.length - open) + ' finished' : '', { right: '<button class="ib pri" data-a="newBean" aria-label="Add a bag">' + I(IC.plus) + '</button>' + avatar() });
-  if (!S.beans.length) return h + '<div class="card welcome">' + CUP + '<h2>No beans yet</h2><div class="muted">Add your first bag to start your shelf.</div><button class="btn" data-a="newBean">' + I(IC.plus) + 'Add a bag</button></div>';
+  if (!S.beans.length) return h + '<div class="card welcome">' + scene({ cup: true }) + '<h2>No beans yet</h2><div class="muted">Add your first bag to start your shelf.</div><button class="btn" data-a="newBean">' + I(IC.plus) + 'Add a bag</button></div>';
   h += '<div class="search">' + I(IC.search, 20) + '<input id="f-q" type="search" placeholder="Search name, roaster, origin, flavour" value="' + esc(P.q) + '" autocomplete="off" aria-label="Search beans"></div>';
   h += seg('beanTab', [['open', 'Open'], ['done', 'Finished'], ['all', 'All']], P.beanTab, 'Show');
   h += '<div class="tools">' + sel('sort', [['recent', 'Recently brewed'], ['rating', 'Highest rated'], ['fresh', 'Freshest roast'], ['cost', 'Cheapest per gram'], ['name', 'Name A–Z']], P.sort, 'Sort by') +
@@ -564,7 +620,7 @@ function added(b) {
     }
   }
   if (!reduced()) for (let i = 0; i < 7; i++) pile += '<b style="left:' + (8 + i * 14 + Math.random() * 6).toFixed(0) + '%;animation-delay:' + (420 + i * 90) + 'ms"></b>';
-  el.innerHTML = '<div class="pile" aria-hidden="true">' + pile + '</div><div class="addcard" role="dialog" aria-modal="true" aria-label="Bag added">' +
+  el.innerHTML = scene({ cls: 'full', tall: true }) + '<div class="pile" aria-hidden="true">' + pile + '</div><div class="addcard" role="dialog" aria-modal="true" aria-label="Bag added">' +
     '<div class="small muted">Added to your shelf</div><h2>' + esc(b.name) + '</h2>' +
     '<div class="small muted">' + esc([b.roaster, b.origin, b.process].filter(Boolean).join(' · ')) + '</div>' +
     '<button class="btn" data-a="addedBrew" data-id="' + b.id + '">' + I(IC.drop) + 'Brew it now</button><button class="btn ghost" data-a="addedDone">Later</button></div>';
@@ -762,7 +818,7 @@ const BY = {
 function vJournal() {
   let h = head('Journal', '', { right: avatar() });
   if (!S.brews.length) {
-    return h + '<div class="card welcome">' + CUP + '<h2>No brews yet</h2><div class="muted">Every cup you brew shows up here, with cost, ratings and what you drank most.</div>' +
+    return h + '<div class="card welcome">' + scene({ cup: true }) + '<h2>No brews yet</h2><div class="muted">Every cup you brew shows up here, with cost, ratings and what you drank most.</div>' +
       '<button class="btn" data-a="go" data-v="brew">' + I(IC.drop) + 'Brew a cup</button></div>';
   }
   const span = { '30': 30, '90': 90, '365': 365 }[P.period] || 0, now = Date.now(), from = span ? now - span * DAY : 0;
@@ -849,6 +905,7 @@ function vGear() {
 function vSetup() {
   const first = !S.setupSeen;
   let h = head(first ? 'Your gear' : 'Brewers', first ? 'Pick what you brew with' : 'Tap to add or remove', { back: first ? null : 'back' });
+  if (first) h += scene({ cls: 'intro' });
   if (first) h += '<div class="small muted">Brewing will only show these, with the recipes each one can do. You can change this any time in Gear.</div>';
   h += '<div class="search">' + I(IC.search, 20) + '<input id="f-cq" type="search" placeholder="Search brewers or brands" autocomplete="off" aria-label="Search brewers"></div>';
   h += '<div id="catalog" class="stack" style="gap:16px">' + catalogHtml('') + '</div>';
