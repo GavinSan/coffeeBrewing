@@ -1,5 +1,5 @@
 // Bump this after changing files so old caches are dropped
-const CACHE = 'coffee-v4';
+const CACHE = 'coffee-v5';
 const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'sync.js', 'config.js', 'vendor/supabase.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-180.png'];
 const FONTS = ['fonts.googleapis.com', 'fonts.gstatic.com'];
 
