@@ -21,7 +21,7 @@ npm test                    # all suites, real Chromium
 npm test -- gear.test.js    # one suite
 ```
 
-`tests/run.js` checks syntax, serves the repo on a free port and runs each `tests/*.test.js`. Screenshots land in `test-results/` (uploaded by CI). Add or update a test with every behaviour change. Tests that use `page.clock` must advance the clock after a navigation, since the hash change only renders when the clock moves.
+`tests/run.js` checks syntax, serves the repo on a free port and runs each `tests/*.test.js`. Screenshots land in `test-results/` (uploaded by CI). Add or update a test with every behaviour change. Tests that use `page.clock` must advance the clock after a navigation, since the hash change only renders when the clock moves: wait with `settle(cond)` in `flow.test.js` (ticks until true), never a fixed `runFor` followed by a one-off check.
 
 ## Things that bite
 
