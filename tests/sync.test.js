@@ -67,8 +67,7 @@ async function signIn(d) {
   await d.p.fill('#f-email', 'me@example.com');
   await d.p.click('[data-a=sendCode]');
   await d.p.waitForSelector('#f-code');
-  await d.p.fill('#f-code', '123456');
-  await d.p.press('#f-code', 'Enter');
+  await d.p.fill('#f-code', '123456'); // signs in as soon as 6 digits are in
   await d.p.waitForSelector('#sync-status');
 }
 
