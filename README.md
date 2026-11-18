@@ -24,4 +24,14 @@ After changing files, bump `CACHE` in `sw.js` so installed copies pick up the up
 
 ## Data
 
-Everything is stored in the browser's `localStorage` on the device. Gear → Export makes a JSON backup.
+Everything is saved in the browser's `localStorage` first, so the app works offline. Gear → Export makes a JSON backup.
+
+### Cloud sync (Supabase)
+
+Sign in under Gear → Account (email code, no password) to keep the log in Supabase and use the same data on every device, including a future App Store build.
+
+- `config.js` holds the project URL and publishable (anon) key. With an empty key the app runs on-device only.
+- `supabase/schema.sql` creates the `brew_state` table (one JSON row per account, row level security on). Run it once in the Supabase SQL Editor.
+- `sync.js` uploads changes about 1.5 s after each save and pulls when the app comes back to the foreground. If two devices changed while apart, both sets of items are kept; the device syncing last wins when it edited the same item.
+- In Supabase → Authentication → Emails, add `{{ .Token }}` to the **Magic Link** and **Confirm signup** templates so the email shows the code.
+- `vendor/supabase.js` is `@supabase/supabase-js` 2.118.0 (MIT), vendored so there's no build step or CDN.
