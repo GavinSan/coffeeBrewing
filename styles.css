@@ -353,21 +353,21 @@ body.dark .chip.sm { min-height: 36px; }
 .tstep .tt { font-size: 13px; font-weight: 600; opacity: .75; margin-left: 4px; }
 
 /* ---------- softer, livelier motion ---------- */
-:root { --spring: cubic-bezier(.34, 1.56, .64, 1); --soft: cubic-bezier(.22, 1, .36, 1); }
-.chip, .tile, .seg2 button, .btn, .row, .stars button, .seg button { transition: background-color .25s ease, color .25s ease, box-shadow .25s ease, transform .25s var(--soft); }
+:root { --spring: cubic-bezier(.34, 1.56, .64, 1); --ease: cubic-bezier(.22, 1, .36, 1); } /* --soft is a colour; don't reuse the name */
+.chip, .tile, .seg2 button, .btn, .row, .stars button, .seg button { transition: background-color .25s ease, color .25s ease, box-shadow .25s ease, transform .25s var(--ease); }
 .chip:active, .tile:active, .btn:active, .seg2 button:active { transform: scale(.96); }
 @keyframes pop { 0% { filter: blur(2.5px); opacity: .5; transform: scale(.94); } 55% { filter: blur(0); opacity: 1; transform: scale(1.03); } 100% { transform: scale(1); } }
-.pop { animation: pop .42s var(--soft); }
-.rise { animation: rise .42s var(--soft) both; }
+.pop { animation: pop .42s var(--ease); }
+.rise { animation: rise .42s var(--ease) both; }
 @keyframes rise { from { opacity: 0; transform: translateY(10px); filter: blur(2px); } to { opacity: 1; transform: none; filter: none; } }
-.meter i { transform-origin: left; animation: grow .9s var(--soft) both; }
+.meter i { transform-origin: left; animation: grow .9s var(--ease) both; }
 @keyframes grow { from { transform: scaleX(0); } }
 .chart .bar { transform-box: fill-box; transform-origin: bottom; animation: barup .7s var(--spring) both; }
 .chart .bar:nth-of-type(3n) { animation-delay: .05s; } .chart .bar:nth-of-type(3n+1) { animation-delay: .1s; }
 @keyframes barup { from { transform: scaleY(0); } }
 #toast.on { animation: toastin .4s var(--spring); }
 @keyframes toastin { from { opacity: 0; transform: translate(-50%, 14px) scale(.96); } to { opacity: 1; transform: translate(-50%, 0); } }
-#sheet .box { animation: up .38s var(--soft); }
+#sheet .box { animation: up .38s var(--ease); }
 /* steam drifting off the cup */
 .welcome .steam { animation: steam 3.2s ease-in-out infinite; opacity: 0; }
 .welcome .steam.s2 { animation-delay: 1s; } .welcome .steam.s3 { animation-delay: 2s; }
@@ -388,4 +388,37 @@ body:not(.brewing) #wave .wisp { display: none; }
 @media (prefers-reduced-motion: reduce) {
   .rise, .meter i, .chart .bar, .welcome .steam, .welcome > svg, .gearhero .mat, #wave .wisp, #fall .pile b, #fall .addcard, .tile.pick .ck, #toast.on { animation: none; }
   .welcome .steam { opacity: .8; }
+}
+
+/* ---------- painted scenes ---------- */
+.scene { position: relative; display: block; width: 100%; aspect-ratio: 12 / 5; overflow: hidden; border-radius: 18px; background: #D9EEF8; flex: none; }
+.scene svg { display: block; width: 100%; height: 100%; }
+/* watercolour paper: a fixed grain laid over the painting */
+.scene::after { content: ''; position: absolute; inset: 0; pointer-events: none; opacity: .22; mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .45 0 0 0 0 .38 0 0 0 0 .3 0 0 0 .55 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E"); }
+.scene .cl { animation: drift 95s linear infinite; }
+@keyframes drift { from { transform: translateX(-90px); } to { transform: translateX(380px); } }
+.scene .gr { transform-box: fill-box; transform-origin: 50% 100%; animation: sway 3.4s ease-in-out infinite alternate; }
+@keyframes sway { from { transform: rotate(-7deg); } to { transform: rotate(7deg); } }
+.scene .glow { transform-box: fill-box; transform-origin: center; animation: glow 6s ease-in-out infinite alternate; }
+@keyframes glow { from { transform: scale(.9); opacity: .75; } to { transform: scale(1.1); opacity: 1; } }
+.scene .star { animation: twinkle 2.6s ease-in-out infinite alternate; }
+@keyframes twinkle { from { opacity: .25; } to { opacity: 1; } }
+.scene .bird { animation: fly 26s linear infinite; animation-delay: -6s; }
+.scene .bird path { transform-box: fill-box; transform-origin: center; animation: flap .45s ease-in-out infinite alternate; }
+@keyframes fly { 0% { transform: translate(-30px, 44px); } 50% { transform: translate(180px, 30px); } 100% { transform: translate(390px, 40px); } }
+@keyframes flap { from { transform: scaleY(1); } to { transform: scaleY(.45); } }
+.scene .steam { animation: steam 3.2s ease-in-out infinite; opacity: 0; }
+.scene .steam.s2 { animation-delay: 1.4s; }
+/* where scenes sit */
+.welcome { padding-top: 0; }
+.welcome > .scene { margin: 0 -22px 6px; width: calc(100% + 44px); border-radius: 22px 22px 0 0; }
+.hero > .scene.band { margin: -18px -18px 0; width: calc(100% + 36px); aspect-ratio: 360 / 104; border-radius: 22px 22px 0 0; }
+.scene.intro { aspect-ratio: 360 / 120; }
+#fall .scene.full { position: absolute; inset: 0; width: 100%; height: 100%; aspect-ratio: auto; border-radius: 0; }
+#fall .scene.full svg { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 100%; }
+@media (prefers-reduced-motion: reduce) {
+  .scene .cl, .scene .gr, .scene .glow, .scene .star, .scene .bird, .scene .bird path, .scene .steam { animation: none; }
+  .scene .steam { opacity: .7; }
+  .scene .bird { transform: translate(120px, 36px); }
 }
