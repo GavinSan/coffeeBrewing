@@ -7,7 +7,8 @@ A bean-first brew log, built as an installable PWA. No build step — plain HTML
 - **New bag** — roaster, origin and farm suggest what you've typed before; "bought one of these again?" copies a previous bag. Roast is a slider, flavours are grouped and searchable, price and weight take numbers only.
 - **Timer** — the water target rises through each pour at a steady kettle rate (5 g/s), then waits and counts down to the next pour.
 - **Journal** — 30 days / 90 days / year / all: cups, spend, cost per cup and rating against the previous period, cups per day/week/month, a sortable breakdown by bean, roaster, origin, process or brewer, and a filterable brew log.
-- **Gear** — grinders, the drippers you own, filters. Account and backup are under the person icon.
+- **Gear** — first run starts here: pick the brewers you own from 27 (cone, flat, wedge, valve, plus French press, AeroPress, siphon, espresso, cold brew), each with its real materials and sizes, or add your own. Brewing then shows only your gear, filters that fit its shape, and recipes it can do (steep and hybrid only for Switch, Clever, Pulsar). Grinders can be manual or electric. Account and backup are under the person icon.
+- **Recipes** — any recipe, built-in ones included, can be renamed and edited (reset to original any time). Steps can have their own name and water temperature. Dose, ratio, temp, grind and recipe times can be typed as well as stepped.
 
 ## Run locally
 

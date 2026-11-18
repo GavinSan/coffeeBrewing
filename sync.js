@@ -9,7 +9,7 @@ window.Cloud = (function () {
   const cfg = window.COFFEE_CLOUD || {};
   const META = 'coffee-sync-v1'; // { uid, base, dirty, at }: who this device last synced as, and the cloud version it has
   const TABLE = 'brew_state';
-  const LISTS = ['beans', 'brews', 'grinders', 'recipes'];
+  const LISTS = ['beans', 'brews', 'grinders', 'recipes', 'gear'];
   const SETS = ['owned', 'filters', 'flavors', 'processes'];
 
   let sb = null, user = null, busy = false, again = false, timer = null, edits = 0;
@@ -56,7 +56,7 @@ window.Cloud = (function () {
 
   // Replace local state without counting it as a local edit
   function apply(data) {
-    S = Object.assign(blank(), data);
+    S = migrate(Object.assign(blank(), data), data);
     try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* ignore */ }
     // don't redraw screens holding a draft or a running timer
     if (!/^#\/?(timer|bean\/new|edit\/|grinder\/|custom|rate|method|recipe)/.test(location.hash)) rerender();
