@@ -600,6 +600,7 @@ function vRate() {
     ADJUSTS.map((x) => '<button class="chip sm' + (Q.adjust === x ? ' on' : '') + '" data-a="adjust" data-v="' + x + '" aria-pressed="' + (Q.adjust === x) + '">' + x + '</button>').join('') + '</div></div>';
   h += '<div class="small muted one">' + esc(brewerName(w)) + ' · ' + brewLine(w) + '</div>';
   h += '<button class="btn" data-a="saveRate">' + I(IC.check) + 'Save</button>';
+  h += '<button class="btn danger" data-a="delBrew">' + I(IC.trash, 20) + 'Delete this brew</button>';
   return h;
 }
 
@@ -1151,6 +1152,13 @@ const A = {
     const Q = DR.Q, w = S.brews.find((x) => x.id === Q.id);
     w.stars = Q.stars; w.r = Q.r; w.adjust = Q.adjust; w.ratedAt = Date.now();
     save(); DR.Q = null; toast('Saved'); back();
+  },
+  delBrew: () => {
+    const w = S.brews.find((x) => x.id === DR.Q.id), b = w ? bean(w.beanId) : null;
+    sheet({ title: 'Delete this brew' + (b ? ' of ' + b.name : '') + '?', ok: 'Delete', danger: true, cb: () => {
+      S.brews = S.brews.filter((x) => x.id !== DR.Q.id);
+      save(); DR.Q = null; toast('Brew deleted'); back();
+    } });
   },
   own: (d) => { const i = S.owned.indexOf(d.v); if (i >= 0) S.owned.splice(i, 1); else S.owned.push(d.v); save(); rerender(); },
   newGrinder: () => { DR.G = null; go('grinder/new'); },
