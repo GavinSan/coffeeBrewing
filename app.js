@@ -987,14 +987,57 @@ function vAccount() {
     return h + '<div class="card"><div style="min-width:0"><h2 class="one">' + esc(u.email) + '</h2><div class="small muted" id="sync-status" role="status">' + esc(Cloud.status()) + '</div></div>' +
       '<div class="g2"><button class="btn sm ghost" data-a="syncNow">Sync now</button><button class="btn sm ghost" data-a="signOut">Sign out</button></div></div></div>';
   }
-  const U = DR.U || (DR.U = { email: '', code: '', step: 'email' });
+  const U = authDraft();
+  const err = U.err ? '<div class="err" role="alert">' + I(IC.info, 18) + '<span>' + esc(U.err) + '</span></div>' : '';
   if (U.step === 'code') {
-    return h + '<div class="card"><div class="small muted">We emailed a code to ' + esc(U.email) + '.</div>' + field('U', 'code', 'Code', { mode: 'numeric', ph: '123456' }) +
-      '<div class="g2"><button class="btn sm ghost" data-a="codeBack">Back</button><button class="btn sm" data-a="verifyCode">Sign in</button></div></div></div>';
+    const sending = U.state === 'sending', busy = U.state === 'verifying';
+    return h + '<div class="card"><div class="small" id="auth-msg" role="status">' + authMsg(U) + '</div>' +
+      '<div class="field"><label for="f-code">6-digit code</label><input id="f-code" class="code" data-o="U" data-f="code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="10" value="' + esc(U.code || '') + '" aria-describedby="auth-msg"></div>' +
+      err + '<button class="btn sm" data-a="verifyCode"' + (busy ? ' disabled' : '') + '>' + (busy ? '<i class="spin" aria-hidden="true"></i>Signing in…' : 'Sign in') + '</button>' +
+      '<div class="rowb"><button class="link" data-a="codeBack">Use another email</button><button class="link" id="resend" data-a="resendCode"' + (sending || resendWait(U) ? ' disabled' : '') + '>' + resendLabel(U) + '</button></div></div></div>';
   }
-  return h + '<div class="card"><div class="small muted">Sign in to keep your log in the cloud and use it on every device.</div>' + field('U', 'email', 'Email', { type: 'email', ph: 'you@example.com' }) +
-    '<button class="btn sm" data-a="sendCode">Email me a code</button></div></div>';
+  const sending = U.state === 'sending';
+  return h + '<div class="card"><div class="small muted">Sign in with your email to keep your log in the cloud and use it on every device. No password needed.</div>' +
+    '<div class="field"><label for="f-email">Email</label><input id="f-email" data-o="U" data-f="email" type="email" inputmode="email" autocomplete="email" autocapitalize="off" spellcheck="false" value="' + esc(U.email || '') + '"></div>' +
+    err + '<button class="btn sm" data-a="sendCode"' + (sending ? ' disabled' : '') + '>' + (sending ? '<i class="spin" aria-hidden="true"></i>Sending…' : 'Email me a code') + '</button></div></div>';
 }
+// the sign-in draft survives a reload, so switching to Mail and back keeps you on the code step
+const AUTH_KEY = 'coffee-signin';
+function authDraft() {
+  if (!DR.U) {
+    let u = null;
+    try { u = JSON.parse(localStorage.getItem(AUTH_KEY)); } catch (e) { u = null; }
+    DR.U = u && u.email && Date.now() - (u.sentAt || 0) < 15 * 60e3
+      ? { email: u.email, code: '', step: 'code', state: 'sent', sentAt: u.sentAt, err: '' }
+      : { email: '', code: '', step: 'email', state: '', sentAt: 0, err: '' };
+  }
+  return DR.U;
+}
+function keepAuthDraft() {
+  try {
+    const U = DR.U;
+    if (U && U.step === 'code' && U.state !== 'sending') localStorage.setItem(AUTH_KEY, JSON.stringify({ email: U.email, sentAt: U.sentAt }));
+    else localStorage.removeItem(AUTH_KEY);
+  } catch (e) { /* private mode */ }
+}
+const authMsg = (U) => U.state === 'sending' ? 'Sending a code to <b>' + esc(U.email) + '</b>…'
+  : 'We sent a code to <b>' + esc(U.email) + '</b>. It can take a minute to arrive; check spam or promotions too.';
+const resendWait = (U) => Math.max(0, 60 - Math.floor((Date.now() - (U.sentAt || 0)) / 1000));
+const resendLabel = (U) => { const w = resendWait(U); return w ? 'Resend in ' + w + 's' : 'Resend code'; };
+function authError(e) {
+  const m = String((e && e.message) || ''), st = e && e.status;
+  if (!navigator.onLine || /fetch|network/i.test(m)) return 'No connection. Check your internet and try again.';
+  if (st === 429 || /seconds|rate limit|too many/i.test(m)) return 'Too many codes in a short time. Wait a minute and try again.';
+  if (/expired|invalid|otp/i.test(m)) return 'That code is wrong or has expired. Use the newest email, or resend.';
+  if (st >= 500 || /sending|smtp/i.test(m)) return 'We couldn’t send the email just now. Try again in a moment.';
+  return m || 'Something went wrong. Try again.';
+}
+// tick the resend countdown while the code step is on screen
+setInterval(() => {
+  const b = document.getElementById('resend');
+  if (!b || !DR.U || DR.U.state === 'sending') return;
+  b.textContent = resendLabel(DR.U); b.disabled = resendWait(DR.U) > 0;
+}, 1000);
 function vGrinder() {
   const g = DR.G;
   let h = head(g.id ? 'Edit grinder' : 'Grinder', '', { back: 'back' });
@@ -1462,21 +1505,30 @@ const A = {
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   },
   importData: () => { const i = document.getElementById('imp'); if (i) i.click(); },
-  sendCode: async (d, el) => {
-    const U = DR.U, email = String(U.email || '').trim();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { toast('Enter your email'); const f = document.getElementById('f-email'); if (f) f.focus(); return; }
-    if (el) el.disabled = true;
-    try { await Cloud.sendCode(email); U.email = email; U.code = ''; U.step = 'code'; rerender(); const f = document.getElementById('f-code'); if (f) f.focus(); }
-    catch (e) { toast((e && e.message) || 'Couldn’t send the code'); if (el) el.disabled = false; }
+  sendCode: async () => {
+    const U = authDraft(), email = String(U.email || '').trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { U.err = 'Enter a valid email address.'; rerender(); const f = document.getElementById('f-email'); if (f) f.focus(); return; }
+    if (U.state === 'sending') return;
+    // move on at once; the email is sent in the background
+    Object.assign(U, { email: email, step: 'code', state: 'sending', err: '', code: '', sentAt: Date.now() });
+    rerender(); const f = document.getElementById('f-code'); if (f) f.focus();
+    try { await Cloud.sendCode(email); U.state = 'sent'; U.sentAt = Date.now(); keepAuthDraft(); }
+    catch (e) { Object.assign(U, { step: 'email', state: '', err: authError(e) }); keepAuthDraft(); }
+    if (DR.U !== U) return;
+    if (U.step === 'email') { rerender(); return; }
+    const m = document.getElementById('auth-msg'); if (m) m.innerHTML = authMsg(U);
+    const r = document.getElementById('resend'); if (r) { r.textContent = resendLabel(U); r.disabled = true; }
   },
-  verifyCode: async (d, el) => {
-    const U = DR.U, code = String(U.code || '').replace(/\s/g, '');
-    if (!code) { toast('Enter the code'); return; }
-    if (el) el.disabled = true;
-    try { await Cloud.verify(U.email, code); toast('Signed in'); }
-    catch (e) { toast('That code didn’t work'); if (el) el.disabled = false; }
+  resendCode: () => { const U = authDraft(); if (resendWait(U) || U.state === 'sending') return; A.sendCode(); },
+  verifyCode: async () => {
+    const U = authDraft(), code = String(U.code || '').replace(/\D/g, '');
+    if (U.state === 'verifying' || U.state === 'sending' && !code) return;
+    if (code.length < 6) { U.err = 'Enter the 6-digit code from the email.'; rerender(); const f = document.getElementById('f-code'); if (f) f.focus(); return; }
+    U.state = 'verifying'; U.err = ''; rerender();
+    try { await Cloud.verify(U.email, code); DR.U = null; keepAuthDraft(); toast('Signed in'); if (/^#\/?account/.test(location.hash)) rerender(); }
+    catch (e) { if (DR.U !== U) return; U.state = 'sent'; U.err = authError(e); U.code = ''; rerender(); const f = document.getElementById('f-code'); if (f) f.focus(); }
   },
-  codeBack: () => { DR.U.step = 'email'; rerender(); },
+  codeBack: () => { const U = authDraft(); Object.assign(U, { step: 'email', state: '', err: '', code: '' }); keepAuthDraft(); rerender(); const f = document.getElementById('f-email'); if (f) f.focus(); },
   syncNow: () => Cloud.sync(),
   signOut: () => sheet({ title: 'Sign out? Your log stays on this phone.', ok: 'Sign out', cb: () => Cloud.signOut() })
 };
@@ -1534,6 +1586,13 @@ document.addEventListener('input', (e) => {
     const n = +el.value; DR.B.roast = n;
     el.style.setProperty('--c', ROAST_C[n - 1]); el.setAttribute('aria-valuetext', ROASTS[n - 1]);
     document.getElementById('roast-lbl').textContent = ROASTS[n - 1];
+    return;
+  }
+  if (el.id === 'f-code' && DR.U) {
+    const v = el.value.replace(/\D/g, '');
+    if (v !== el.value) el.value = v;
+    DR.U.code = v;
+    if (v.length === 6) A.verifyCode();
     return;
   }
   if (!el.dataset || !el.dataset.o || !DR[el.dataset.o]) return;
