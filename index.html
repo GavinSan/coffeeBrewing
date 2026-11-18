@@ -30,6 +30,12 @@
 <script src="app.js"></script>
 <script>
 if ('serviceWorker' in navigator) {
+  // when a new version takes over, reload once so it shows straight away (not mid-brew)
+  var hadWorker = !!navigator.serviceWorker.controller, reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', function () {
+    if (!hadWorker || reloaded || /^#\/?timer/.test(location.hash)) return;
+    reloaded = true; location.reload();
+  });
   window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
 }
 </script>

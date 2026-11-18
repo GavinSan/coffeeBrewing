@@ -1,6 +1,7 @@
 // Bump this after changing files so old caches are dropped
-const CACHE = 'coffee-v3';
+const CACHE = 'coffee-v4';
 const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'sync.js', 'config.js', 'vendor/supabase.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-180.png'];
+const FONTS = ['fonts.googleapis.com', 'fonts.gstatic.com'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -12,21 +13,24 @@ self.addEventListener('activate', (e) => {
   );
 });
 
-// Serve from cache (works offline) and refresh in the background for next launch
+// The app: network first so a new version shows on the next open; the cached copy is used offline
+// or when the network takes more than 3 s. Fonts never change, so they come from cache first.
+// Cloud sync requests are left alone.
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
-  // Only cache the app itself and its fonts; cloud sync requests always go to the network
-  const host = new URL(e.request.url).host;
-  if (host !== self.location.host && host !== 'fonts.googleapis.com' && host !== 'fonts.gstatic.com') return;
-  e.respondWith(
-    caches.open(CACHE).then((cache) =>
-      cache.match(e.request).then((hit) => {
-        const net = fetch(e.request).then((res) => {
-          if (res && (res.ok || res.type === 'opaque')) cache.put(e.request, res.clone());
-          return res;
-        }).catch(() => hit);
-        return hit || net;
-      })
-    )
-  );
+  const url = new URL(e.request.url);
+  if (FONTS.indexOf(url.host) >= 0) {
+    e.respondWith(caches.open(CACHE).then((c) => c.match(e.request).then((hit) => hit || fetch(e.request).then((res) => {
+      if (res && (res.ok || res.type === 'opaque')) c.put(e.request, res.clone());
+      return res;
+    }))));
+    return;
+  }
+  if (url.origin !== self.location.origin) return;
+  e.respondWith(caches.open(CACHE).then((c) => {
+    const net = fetch(e.request).then((res) => { if (res && res.ok) c.put(e.request, res.clone()); return res; });
+    const slow = new Promise((resolve) => setTimeout(resolve, 3000)).then(() => c.match(e.request, { ignoreSearch: true }));
+    const cached = () => c.match(e.request, { ignoreSearch: true }).then((hit) => hit || (e.request.mode === 'navigate' ? c.match('index.html') : undefined));
+    return Promise.race([net, slow.then((hit) => hit || net)]).catch(() => cached()).then((res) => res || cached());
+  }));
 });

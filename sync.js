@@ -10,7 +10,7 @@ window.Cloud = (function () {
   const META = 'coffee-sync-v1'; // { uid, base, dirty, at }: who this device last synced as, and the cloud version it has
   const TABLE = 'brew_state';
   const LISTS = ['beans', 'brews', 'grinders', 'recipes'];
-  const SETS = ['owned', 'filters'];
+  const SETS = ['owned', 'filters', 'flavors', 'processes'];
 
   let sb = null, user = null, busy = false, again = false, timer = null, edits = 0;
   let state = 'idle', err = '';
@@ -19,7 +19,8 @@ window.Cloud = (function () {
   function readMeta() { try { return JSON.parse(localStorage.getItem(META)) || {}; } catch (e) { return {}; } }
   function writeMeta() { try { localStorage.setItem(META, JSON.stringify(meta)); } catch (e) { /* storage full or blocked */ } }
   function enabled() { return !!(cfg.url && cfg.key && window.supabase); }
-  function onGear() { return /^#\/?gear$/.test(location.hash); }
+  // screens that show the account (the Account page, and the avatar on each tab)
+  function showsAccount() { return /^#?\/?(account|brew|beans|journal|gear)?$/.test(location.hash); }
 
   function setState(s, e) {
     state = s; err = e || '';
@@ -57,7 +58,8 @@ window.Cloud = (function () {
   function apply(data) {
     S = Object.assign(blank(), data);
     try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* ignore */ }
-    if (!/^#\/?(timer|bean\/|grinder\/|custom|rate|method|recipe)/.test(location.hash)) rerender();
+    // don't redraw screens holding a draft or a running timer
+    if (!/^#\/?(timer|bean\/new|edit\/|grinder\/|custom|rate|method|recipe)/.test(location.hash)) rerender();
   }
 
   // Called by app.js save() after every local change
@@ -141,7 +143,7 @@ window.Cloud = (function () {
       const was = user && user.id;
       user = u;
       if ((u && u.id) === was) return;
-      if (onGear()) rerender();
+      if (showsAccount()) rerender();
       // don't call Supabase from inside this callback; it can deadlock the auth lock
       if (u) setTimeout(sync, 0);
     });
