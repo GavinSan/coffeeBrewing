@@ -2,12 +2,12 @@
 
 A bean-first brew log, built as an installable PWA. No build step — plain HTML, CSS and JS.
 
-- **Beans** — name, roaster, farm, price, weight, roast date, process, roast level, flavours. Cost per gram is worked out for you, and each bag shows how much is left.
-- **Brew** — pick a method, dripper and filter, then a recipe (4:6, one pour, ten pour, Switch, or your own). Dose, ratio, temperature and grind remember your last brew.
-- **Timer** — 3 or 5 second countdown, pour-by-pour targets, and a coffee level that rises as you pour.
-- **Taste** — rate after you drink: six-point hexagon (aroma, acidity, sweet, body, bitter, finish), stars, and what to change next time.
-- **Stats** — cost per gram and per cup, how long a bag lasted, and a roaster comparison.
-- **Gear** — grinders (burr type, usual setting) and the drippers you own.
+- **Brew** — home screen. New users are asked to add a bag; after that it shows the bag you're on with your last cup and any "grind finer next time" note, so a brew is one tap. Bags you've brewed before skip straight to the recipe.
+- **Beans** — your shelf: search, Open / Finished / All, sort (recently brewed, rating, freshest, cost), 4★+ filter, group by roaster. Each bag has a page with grams left, best cup ("brew it the same way"), average taste and every brew.
+- **New bag** — roaster, origin and farm suggest what you've typed before; "bought one of these again?" copies a previous bag. Roast is a slider, flavours are grouped and searchable, price and weight take numbers only.
+- **Timer** — the water target rises through each pour at a steady kettle rate (5 g/s), then waits and counts down to the next pour.
+- **Journal** — 30 days / 90 days / year / all: cups, spend, cost per cup and rating against the previous period, cups per day/week/month, a sortable breakdown by bean, roaster, origin, process or brewer, and a filterable brew log.
+- **Gear** — grinders, the drippers you own, filters. Account and backup are under the person icon.
 
 ## Run locally
 
