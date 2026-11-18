@@ -18,9 +18,11 @@ const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails++
   await p.click('[data-a=setupDone]'); await p.clock.runFor(100);
   const shot = (n) => p.screenshot({ path: OUT + n + '.png', fullPage: true });
   const txt = (s) => p.textContent(s);
+  // Under the fake clock a hash change renders only when the clock moves: tick until the condition holds (max 2 s)
+  const settle = async (cond) => { for (let i = 0; i < 40; i++) { if (await cond()) return true; await p.clock.runFor(50); } return cond(); };
 
   // 1. new user lands on Brew with a clear first step
-  ok(await p.locator('text=Start with a bag of beans').count() === 1, 'new user: home asks for a bag');
+  ok(await settle(async () => (await p.locator('text=Start with a bag of beans').count()) === 1), 'new user: home asks for a bag');
   await shot('01-home-empty');
   await p.click('.welcome [data-a=newBean]');
   ok(await p.locator('text=Rating').count() === 0, 'form: no bean rating');
@@ -68,8 +70,8 @@ const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails++
   await p.clock.runFor(30000);
   const g2 = parseInt(await txt('#t-gnow'));
   ok(g2 > 64 && g2 < 128, 'pour 2 ramps from 64: ' + g2);
-  await p.click('[data-a=tDone]'); await p.waitForURL(/#brew$/); await p.clock.runFor(100);
-  ok(p.url().endsWith('#brew') && await p.locator('.banner').count() === 1, 'done: home with rate prompt');
+  await p.click('[data-a=tDone]'); await p.waitForURL(/#brew$/);
+  ok(await settle(async () => (await p.locator('.banner').count()) === 1), 'done: home with rate prompt');
   await p.click('.banner [data-a=rate]');
   await p.click('[data-a=rateQ][data-n="4"]'); await p.click('[data-a=adjust][data-v=Finer]');
   await p.click('[data-a=saveRate]');
