@@ -3,5 +3,7 @@
    read or change is enforced by row level security in supabase/schema.sql. */
 window.COFFEE_CLOUD = {
   url: 'https://pbvfevkgzusqhqkoexjc.supabase.co',
-  key: 'sb_publishable_F3NFPHYWpnEF3_nu0cMYwA_1Si5Fiz9'
+  key: 'sb_publishable_F3NFPHYWpnEF3_nu0cMYwA_1Si5Fiz9',
+  // digits in the emailed sign-in code (Supabase → Authentication → Providers → Email → OTP length)
+  otpLength: 8
 };

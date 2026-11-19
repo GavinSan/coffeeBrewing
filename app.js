@@ -726,8 +726,13 @@ function vTimer() {
   h += '<div class="pour" id="t-pour"><div class="rowb"><span class="gnow" id="t-gnow">0 g</span><span id="t-gto"></span></div><div class="pbar"><i id="t-pb"></i></div></div>';
   h += '<div class="wrap" id="t-cd" style="justify-content:center;align-items:center"><span class="small muted">Countdown</span>' +
     [3, 5].map((n) => '<button class="chip sm' + (S.countdown === n ? ' on' : '') + '" data-a="setCd" data-n="' + n + '" aria-pressed="' + (S.countdown === n) + '">' + n + 's</button>').join('') + '</div>';
-  h += '<div class="stack grow" style="gap:6px">' + P2.steps.map((s, i) => '<div class="tstep" id="ts-' + i + '"><div style="display:flex;align-items:center;gap:8px;min-width:0"><div class="tm">' + fmt(s.t) + '</div><div class="one">' + esc(s.label) + (s.temp != null ? ' <span class="tt">' + s.temp + '°</span>' : '') + '</div></div>' +
-    (s.g != null ? '<div class="g">' + s.g + ' g</div>' : '') + '</div>').join('') + '</div>';
+  // steps as a carousel: the current one is centred, finished ones slide off to the left (swipe back to see them)
+  h += '<div class="rail" id="t-rail" role="list" aria-label="Steps">' + P2.steps.map((s, i) => '<div class="tstep" id="ts-' + i + '" role="listitem">' +
+    '<div class="tm">' + fmt(s.t) + '<i class="ck" aria-label="done">' + I(IC.check, 14) + '</i></div>' +
+    '<div class="one tl">' + esc(s.label) + (s.temp != null ? ' <span class="tt">' + s.temp + '°</span>' : '') + '</div>' +
+    '<div class="g">' + (s.g != null ? s.g + ' g' : '&nbsp;') + '</div></div>').join('') + '</div>';
+  h += '<div class="grow"></div>';
+  // controls stay on screen however long the recipe is
   h += '<div class="tctl"><button class="ib" style="justify-self:start;width:56px;height:56px;border-radius:28px" data-a="tReset" aria-label="Restart">' + I(IC.reset) + '</button>' +
     '<button class="play" id="t-main" data-a="tToggle" aria-label="Start">' + PLAY + '</button>' +
     '<button class="btn done" style="justify-self:end" data-a="tDone">' + I(IC.check) + 'Done</button></div>';
@@ -992,7 +997,7 @@ function vAccount() {
   if (U.step === 'code') {
     const sending = U.state === 'sending', busy = U.state === 'verifying';
     return h + '<div class="card"><div class="small" id="auth-msg" role="status">' + authMsg(U) + '</div>' +
-      '<div class="field"><label for="f-code">6-digit code</label><input id="f-code" class="code" data-o="U" data-f="code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="10" value="' + esc(U.code || '') + '" aria-describedby="auth-msg"></div>' +
+      '<div class="field"><label for="f-code">' + OTP_LEN + '-digit code</label><input id="f-code" class="code" data-o="U" data-f="code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="10" value="' + esc(U.code || '') + '" aria-describedby="auth-msg"></div>' +
       err + '<button class="btn sm" data-a="verifyCode"' + (busy ? ' disabled' : '') + '>' + (busy ? '<i class="spin" aria-hidden="true"></i>Signing in…' : 'Sign in') + '</button>' +
       '<div class="rowb"><button class="link" data-a="codeBack">Use another email</button><button class="link" id="resend" data-a="resendCode"' + (sending || resendWait(U) ? ' disabled' : '') + '>' + resendLabel(U) + '</button></div></div></div>';
   }
@@ -1003,6 +1008,9 @@ function vAccount() {
 }
 // the sign-in draft survives a reload, so switching to Mail and back keeps you on the code step
 const AUTH_KEY = 'coffee-signin';
+// code length set in Supabase; codes of 6–10 digits are still accepted if it changes
+const OTP_LEN = Math.min(10, Math.max(6, +((window.COFFEE_CLOUD || {}).otpLength) || 6));
+let otpWait = null;
 function authDraft() {
   if (!DR.U) {
     let u = null;
@@ -1150,10 +1158,18 @@ function rerender() {
 }
 
 // ---------- timer ----------
+// centre a step card in the carousel
+function railTo(i, smooth) {
+  const rail = document.getElementById('t-rail'), el = document.getElementById('ts-' + Math.max(0, i));
+  if (!rail || !el) return;
+  const left = el.offsetLeft - (rail.clientWidth - el.offsetWidth) / 2;
+  rail.scrollTo({ left: Math.max(0, left), behavior: smooth && !reduced() ? 'smooth' : 'auto' });
+}
 function initTimer() {
   if (!T) T = { phase: 'idle', base: 0, startAt: 0, cdEnd: 0, idx: -1, iv: null, cdShown: null, btn: '', pouring: false };
   T.btn = '';
   paintTimer();
+  railTo(T.idx, false);
 }
 function elapsedNow() { return T.phase === 'run' ? T.base + (Date.now() - T.startAt) / 1000 : T.base; }
 function beep(freq, ms) {
@@ -1190,7 +1206,7 @@ function paintTimer() {
   const P2 = plan(DR.D);
   const cap = document.getElementById('t-cap'), act = document.getElementById('t-act'), wave = document.getElementById('wave');
   const gnow = document.getElementById('t-gnow'), gto = document.getElementById('t-gto'), pb = document.getElementById('t-pb');
-  document.getElementById('t-cd').style.visibility = T.phase === 'idle' ? 'visible' : 'hidden';
+  document.getElementById('t-cd').hidden = T.phase !== 'idle';
   if (T.phase === 'count') {
     const leftS = Math.ceil((T.cdEnd - Date.now()) / 1000);
     if (leftS <= 0) { T.phase = 'run'; T.startAt = Date.now(); T.base = 0; T.idx = -1; }
@@ -1203,7 +1219,7 @@ function paintTimer() {
   const el = elapsedNow();
   let idx = -1;
   if (T.phase !== 'idle') P2.steps.forEach((s, i) => { if (el >= s.t) idx = i; });
-  if (T.phase === 'run' && idx !== T.idx) { T.idx = idx; beep(880, 220); if (navigator.vibrate) navigator.vibrate(120); }
+  if (T.phase === 'run' && idx !== T.idx) { T.idx = idx; beep(880, 220); if (navigator.vibrate) navigator.vibrate(120); railTo(idx, true); }
   P2.steps.forEach((s, i) => { document.getElementById('ts-' + i).className = 'tstep' + (i === idx ? ' now' : (i < idx ? ' past' : '')); });
   clock.textContent = fmt(el);
 
@@ -1442,7 +1458,7 @@ const A = {
     else if (T.phase === 'paused') { T.startAt = Date.now(); T.phase = 'run'; }
     paintTimer();
   },
-  tReset: () => { if (!T) return; clearInterval(T.iv); const ac = T.ac; T = { phase: 'idle', base: 0, startAt: 0, cdEnd: 0, idx: -1, iv: null, cdShown: null, ac: ac, btn: '', pouring: false }; paintTimer(); },
+  tReset: () => { if (!T) return; clearInterval(T.iv); const ac = T.ac; T = { phase: 'idle', base: 0, startAt: 0, cdEnd: 0, idx: -1, iv: null, cdShown: null, ac: ac, btn: '', pouring: false }; paintTimer(); railTo(0, true); },
   tDone: () => logBrew(T && (T.phase === 'run' || T.phase === 'paused') ? Math.round(elapsedNow()) : null),
   rate: (d) => { DR.Q = null; go('rate/' + d.id); },
   skipRate: (d) => { const w = S.brews.find((x) => x.id === d.id); if (w) { w.skip = true; save(); } rerender(); },
@@ -1523,7 +1539,8 @@ const A = {
   verifyCode: async () => {
     const U = authDraft(), code = String(U.code || '').replace(/\D/g, '');
     if (U.state === 'verifying' || U.state === 'sending' && !code) return;
-    if (code.length < 6) { U.err = 'Enter the 6-digit code from the email.'; rerender(); const f = document.getElementById('f-code'); if (f) f.focus(); return; }
+    clearTimeout(otpWait);
+    if (code.length < 6) { U.err = 'Enter the ' + OTP_LEN + '-digit code from the email.'; rerender(); const f = document.getElementById('f-code'); if (f) f.focus(); return; }
     U.state = 'verifying'; U.err = ''; rerender();
     try { await Cloud.verify(U.email, code); DR.U = null; keepAuthDraft(); toast('Signed in'); if (/^#\/?account/.test(location.hash)) rerender(); }
     catch (e) { if (DR.U !== U) return; U.state = 'sent'; U.err = authError(e); U.code = ''; rerender(); const f = document.getElementById('f-code'); if (f) f.focus(); }
@@ -1592,7 +1609,10 @@ document.addEventListener('input', (e) => {
     const v = el.value.replace(/\D/g, '');
     if (v !== el.value) el.value = v;
     DR.U.code = v;
-    if (v.length === 6) A.verifyCode();
+    // sign in as soon as the whole code is in; a code of another length (6–10) goes after a short pause
+    clearTimeout(otpWait);
+    if (v.length === OTP_LEN) A.verifyCode();
+    else if (v.length >= 6) otpWait = setTimeout(() => { if (DR.U && DR.U.code === v) A.verifyCode(); }, 1500);
     return;
   }
   if (!el.dataset || !el.dataset.o || !DR[el.dataset.o]) return;
