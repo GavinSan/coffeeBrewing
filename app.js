@@ -563,11 +563,12 @@ function vBeanForm() {
     const seen = {}, prev = S.beans.slice().sort((x, y) => lastUsed(y) - lastUsed(x)).filter((x) => { const k = (x.name + '|' + x.roaster).toLowerCase(); if (seen[k]) return false; seen[k] = 1; return true; }).slice(0, 6);
     h += '<div class="stack"><div class="label">Bought one of these again?</div><div class="wrap">' + prev.map((x) => '<button class="chip sm" data-a="copyBean" data-id="' + x.id + '">' + I(IC.copy, 16) + esc(x.name) + '</button>').join('') + '</div></div>';
   }
-  if (isNew && window.Cloud && Cloud.enabled()) {
-    if (b._scan === 'reading') h += '<div class="scanning" role="status">' + I(IC.camera, 20) + '<span>Reading the label…</span></div>';
+  if (isNew) {
+    if (b._scan === 'reading') h += '<div class="scanning" role="status">' + I(IC.camera, 20) + '<span id="scan-msg">Reading the label…</span></div>';
     else h += '<button class="btn ghost" data-a="scanBag">' + I(IC.camera) + (b._scan === 'done' ? 'Scan again' : 'Scan the bag') + '</button>';
-    if (b._scan === 'done') h += '<div class="hint">' + I(IC.info, 18) + 'Filled from your photo. Check the details before saving.</div>';
+    if (b._scan === 'done') h += '<div class="hint">' + I(IC.info, 18) + 'Filled from the label. Check the details before saving.</div>';
     if (b._scanErr) h += '<div class="err" role="alert">' + I(IC.info, 18) + '<span>' + esc(b._scanErr) + '</span></div>';
+    if (b._ocr && b._scan !== 'reading') h += '<details class="ocr"><summary>Text found on the label</summary><pre>' + esc(b._ocr) + '</pre></details>';
     h += '<input type="file" id="scan-in" accept="image/*" capture="environment" hidden>';
   }
   if (b._from) h += '<div class="hint">' + I(IC.info, 18) + 'Copied from your last ' + esc(b._from) + '. Set the new roast date.</div>';
@@ -1161,56 +1162,221 @@ function vCustom() {
   return h;
 }
 
-// ---------- scan a bag: a photo goes to the scan-bag edge function, which reads the label ----------
+// ---------- scan a bag: text recognition runs on the phone (Tesseract, vendor/tesseract), nothing is uploaded ----------
+// The photo is read into lines of text, then parseLabel() picks out the fields with plain rules.
 function shrinkPhoto(file) {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file), img = new Image();
     img.onload = () => {
-      const k = Math.min(1, 1568 / Math.max(img.width, img.height)), c = document.createElement('canvas');
+      const k = Math.min(1, 2000 / Math.max(img.width, img.height)), c = document.createElement('canvas');
       c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
-      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-      URL.revokeObjectURL(url); resolve(c.toDataURL('image/jpeg', 0.85).split(',')[1]);
+      const x = c.getContext('2d');
+      x.filter = 'grayscale(1) contrast(1.25)'; // print on coffee bags is often low contrast
+      x.drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url); resolve(c);
     };
     img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('That file isn’t a photo we can read.')); };
     img.src = url;
   });
 }
-function scanError(e) {
-  const st = e && e.status;
-  if (!navigator.onLine || (e && /fetch|network/i.test(e.message))) return 'No connection. Check your internet and try again.';
-  if (st === 401) return 'Sign in again to scan bags.';
-  if (st === 404) return 'Scanning isn’t set up yet (deploy the scan-bag function in Supabase).';
-  if (st === 429) return 'Too many scans right now. Try again in a minute.';
-  return (e && e.message) || 'Couldn’t read the label. Try a sharper photo, straight on.';
+let OCR = null, ocrIdle = null, ocrLog = null;
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script'); s.src = src; s.onload = resolve;
+    s.onerror = () => { s.remove(); reject(new Error('reader')); };
+    document.head.appendChild(s);
+  });
 }
+function ocrWorker() {
+  clearTimeout(ocrIdle);
+  if (!OCR) {
+    OCR = (async () => {
+      if (!window.Tesseract) await loadScript('vendor/tesseract/tesseract.min.js');
+      const base = new URL('vendor/tesseract/', location.href).href;
+      return Tesseract.createWorker('eng', 1, {
+        workerPath: base + 'worker.min.js', corePath: base + 'core', langPath: base + 'lang', workerBlobURL: false,
+        logger: (m) => { if (ocrLog) ocrLog(m); }
+      });
+    })();
+    OCR.catch(() => { OCR = null; });
+  }
+  return OCR;
+}
+// free the reader's memory a minute after the last scan
+function ocrRest() {
+  clearTimeout(ocrIdle);
+  ocrIdle = setTimeout(() => { const w = OCR; OCR = null; if (w) w.then((x) => x.terminate()).catch(() => {}); }, 60000);
+}
+async function readLabel(canvas) {
+  const w = await ocrWorker();
+  const r = await w.recognize(canvas, {}, { text: true, blocks: true });
+  const lines = [];
+  (r.data.blocks || []).forEach((b) => (b.paragraphs || []).forEach((p) => (p.lines || []).forEach((l) => {
+    const t = String(l.text || '').replace(/\s+/g, ' ').trim();
+    if (t && l.confidence >= 35) lines.push({ t: t, h: l.bbox ? l.bbox.y1 - l.bbox.y0 : 0 });
+  })));
+  if (!lines.length && r.data.text) String(r.data.text).split('\n').forEach((t) => { t = t.trim(); if (t) lines.push({ t: t, h: 0 }); });
+  return lines;
+}
+
+const SCAN_MON = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, sept: 9, oct: 10, nov: 11, dec: 12 };
+const SCAN_REGIONS = {
+  Ethiopia: ['ethiopian', 'yirgacheffe', 'yirgachefe', 'guji', 'sidama', 'sidamo', 'limu', 'harrar', 'harar', 'jimma', 'gedeo', 'bensa', 'hambela', 'shakiso', 'kochere'],
+  Kenya: ['kenyan', 'nyeri', 'kirinyaga', 'embu', 'kiambu', "murang'a", 'muranga', 'othaya'],
+  Colombia: ['colombian', 'huila', 'nariño', 'narino', 'cauca', 'tolima', 'antioquia', 'quindío', 'quindio', 'risaralda'],
+  Panama: ['panamanian', 'boquete', 'chiriquí', 'chiriqui', 'volcán', 'volcan'],
+  'Costa Rica': ['tarrazú', 'tarrazu'], Guatemala: ['guatemalan', 'huehuetenango', 'atitlán', 'atitlan', 'acatenango'],
+  Honduras: ['honduran', 'marcala'], Brazil: ['brazilian', 'minas gerais', 'cerrado', 'mogiana', 'sul de minas'],
+  Peru: ['peruvian', 'cajamarca'], Mexico: ['mexican', 'chiapas', 'oaxaca'], Rwanda: ['rwandan'], Burundi: ['burundian'],
+  Indonesia: ['indonesian', 'sumatra', 'java', 'sulawesi', 'aceh', 'gayo', 'toraja'], China: ['yunnan'], Hawaii: ['kona'], Jamaica: ['blue mountain']
+};
+const reEsc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const wordRe = (s) => new RegExp('(^|[^a-z])' + reEsc(s.toLowerCase()) + '(?![a-z])', 'i');
+// "GESHA VILLAGE" → "Gesha Village"; mixed case is kept as printed
+const tidy = (s) => { s = String(s || '').replace(/^[^\w(]+|[^\w)]+$/g, '').replace(/\s+/g, ' ').trim(); return s === s.toUpperCase() ? s.toLowerCase().replace(/(^|[\s\-/(])\S/g, (c) => c.toUpperCase()) : s; };
+
+// One date from a line of text, as YYYY-MM-DD; day-first unless that can't be (or would be in the future)
+function scanDate(s, now) {
+  const t = s.toLowerCase(), out = [], yy = (y) => (y.length === 2 ? 2000 + +y : +y);
+  let m;
+  const re1 = /(20\d\d)\s*[-./年]\s*(\d{1,2})\s*[-./月]\s*(\d{1,2})/g; while ((m = re1.exec(t))) out.push([+m[1], +m[2], +m[3]]);
+  const re2 = /(?:^|\D)(\d{1,2})\s*[-./]\s*(\d{1,2})\s*[-./]\s*(20\d\d|\d\d)(?!\d)/g;
+  while ((m = re2.exec(t))) { const a = +m[1], b = +m[2], y = yy(m[3]); out.push([y, b, a]); if (a <= 12 && b <= 12) out.push([y, a, b]); else if (b > 12) out.push([y, a, b]); }
+  const mon = '(jan|feb|mar|apr|may|jun|jul|aug|sept?|oct|nov|dec)[a-z]*\\.?';
+  const re3 = new RegExp('(\\d{1,2})(?:st|nd|rd|th)?\\s*' + mon + ',?\\s*(20\\d\\d|\\d\\d)(?!\\d)', 'g'); while ((m = re3.exec(t))) out.push([yy(m[3]), SCAN_MON[m[2]], +m[1]]);
+  const re4 = new RegExp(mon + '\\s*(\\d{1,2})(?:st|nd|rd|th)?,?\\s*(20\\d\\d)', 'g'); while ((m = re4.exec(t))) out.push([+m[3], SCAN_MON[m[1]], +m[2]]);
+  for (const [y, mo, d] of out) {
+    if (mo < 1 || mo > 12 || d < 1 || d > 31) continue;
+    const dt = new Date(Date.UTC(y, mo - 1, d));
+    if (dt.getUTCDate() !== d) continue;
+    const age = (now - dt.getTime()) / 864e5;
+    if (age < -2 || age > 400) continue; // a roast date is recent and not in the future
+    return dt.toISOString().slice(0, 10);
+  }
+  return '';
+}
+
+const SCAN_PROCS = [
+  ['Carbonic maceration', /carbonic/], ['Co-ferment', /co-?ferment|infused/], ['Anaerobic', /anaerob/],
+  ['Pulped natural', /pulped[\s-]*natural|semi[\s-]*washed/], ['Wet-hulled', /wet[\s-]*hulled|giling basah/],
+  ['Honey', /(black|red|yellow|white|golden)\s+honey|honey\s*(process|processed)|process(ing)?\s*[:\-]?\s*honey/],
+  ['Washed', /(fully\s+)?washed|wet[\s-]*process/], ['Natural', /natural|dry[\s-]*process|sun[\s-]*dried/]
+];
+const LABEL_RE = /\b(tasting notes?|notes?|flavou?rs?|cup profile|profile|taste|we taste|process(ing)?|method|variet(y|ies|al)|cultivar|altitude|elevation|masl|region|origin|country|producer|farm|roast(ed)?\s*(on|date)?|best before|net\s*w(eigh)?t)\b/i;
+const FARM_RE = /\b(farm|finca|hacienda|fazenda|s[ií]tio|estate|washing station|station|cooperative|co-?op|producer|producers|grower|mill)\b/i;
+
+// Lines of label text ({t, h: line height}) → the New bag fields we can tell
+function parseLabel(lines, now) {
+  now = now || Date.now();
+  lines = lines.map((l) => (typeof l === 'string' ? { t: l, h: 0 } : l)).map((l) => ({ t: String(l.t).replace(/[|_~]+/g, ' ').replace(/\s+/g, ' ').trim(), h: l.h || 0 })).filter((l) => l.t);
+  const all = lines.map((l) => l.t).join('\n'), low = all.toLowerCase(), o = { notes: [] }, used = new Set();
+  // weight
+  let m, re = /(\d+(?:[.,]\d+)?)\s*(kg|g|gr|grams?|oz)\b/gi;
+  while ((m = re.exec(all))) {
+    const n = parseFloat(m[1].replace(',', '.')), u = m[2].toLowerCase(), g = u === 'kg' ? n * 1000 : u === 'oz' ? n * 28.35 : n;
+    if (g >= 50 && g <= 5000) { o.weight = Math.round(u === 'oz' ? Math.round(g / 5) * 5 : g); break; }
+  }
+  // price
+  m = /(?:hk|nt|us|a|c|s|nz)?\$\s?(\d{1,4}(?:\.\d{1,2})?)|(?:£|€|¥|rm|hkd|usd)\s?(\d{1,4}(?:\.\d{1,2})?)/i.exec(all);
+  if (m) o.price = parseFloat(m[1] || m[2]);
+  // roast date: a line that says roast(ed) first, then any date not marked as a best-before
+  const dated = lines.filter((l) => /roast|焙/i.test(l.t)).concat(lines.filter((l) => !/best|before|exp|use by|bb\b/i.test(l.t)));
+  for (const l of dated) { const d = scanDate(l.t, now); if (d) { o.roastDate = d; break; } }
+  // process: a "Process:" line wins, then anything on the bag
+  const procLine = lines.find((l) => /process/i.test(l.t));
+  const known = S.processes.map((p) => [p, wordRe(p)]);
+  for (const src of [procLine ? procLine.t.toLowerCase() : '', low]) {
+    const hit = known.find((p) => p[1].test(src)) || SCAN_PROCS.find((p) => p[1].test(src));
+    if (hit) { o.process = hit[0]; break; }
+  }
+  // roast level
+  m = /\b(light|medium[\s-]*light|medium[\s-]*dark|medium|dark)\b\s*(roast)?/.exec(low.replace(/roast(ed)?\s*(level)?\s*[:\-]\s*/g, ''));
+  if (m && (m[2] || /roast/.test(low))) o.roast = ['light', 'mediumlight', 'medium', 'mediumdark', 'dark'].indexOf(m[1].replace(/[\s-]/g, '')) + 1;
+  // origin: a country, or a region that tells us the country
+  let best = null;
+  const mine = S.beans.map((b) => b.origin).filter(Boolean);
+  ORIGINS.concat(mine).forEach((c) => { const i = low.search(wordRe(c)); if (i >= 0 && (!best || i < best.i)) best = { c: c, i: i }; });
+  Object.keys(SCAN_REGIONS).forEach((c) => SCAN_REGIONS[c].forEach((r) => { const i = low.search(wordRe(r)); if (i >= 0 && (!best || i < best.i)) best = { c: c, i: i }; }));
+  if (best) o.origin = best.c;
+  // roaster: one you've bought from before, or a line that says roasted by / roasters
+  const roasters = Array.from(new Set(S.beans.map((b) => String(b.roaster || '').trim()).filter((r) => r.length > 1))).sort((a, b) => b.length - a.length);
+  o.roaster = roasters.find((r) => wordRe(r).test(all)) || '';
+  if (!o.roaster) {
+    for (const l of lines) {
+      if ((m = /roasted\s+(?:by|at)\s*[:\-]?\s*(.+)/i.exec(l.t))) { o.roaster = tidy(m[1]); used.add(l.t); break; }
+      if (/\b(roasters?|roastery|roasting|coffee)\b/i.test(l.t) && !/\broast(ed)?\s*(on|date|level)?\s*[:\-]|\b(light|medium|dark)\b/i.test(l.t) && l.t.split(' ').length <= 5 && !/\d/.test(l.t) &&
+        !ORIGINS.some((c) => wordRe(c).test(l.t))) { o.roaster = tidy(l.t); used.add(l.t); break; }
+    }
+  }
+  // farm or producer
+  const farms = Array.from(new Set(S.beans.map((b) => String(b.farm || '').trim()).filter((r) => r.length > 2)));
+  o.farm = farms.find((f) => wordRe(f).test(all)) || '';
+  if (!o.farm) {
+    for (const l of lines) {
+      if ((m = /\b(?:farm|producers?|grower|estate|washing station|station)\s*[:\-–]\s*(.+)/i.exec(l.t))) { o.farm = tidy(m[1]); used.add(l.t); break; }
+      if (FARM_RE.test(l.t) && l.t.length <= 40 && !/\d{3,}/.test(l.t)) { o.farm = tidy(l.t); used.add(l.t); break; }
+    }
+  }
+  // tasting notes: the words after "Notes:", then flavours we know anywhere on the bag
+  const addNote = (n) => { n = tidy(n); if (n.length < 3 || n.length > 24 || !/^[a-z][a-z' \-]*$/i.test(n) || o.notes.length >= 6) return; n = cap(n.toLowerCase()); if (o.notes.map((x) => x.toLowerCase()).indexOf(n.toLowerCase()) < 0) o.notes.push(n); };
+  lines.forEach((l, i) => {
+    if (!(m = /\b(?:tasting\s+notes?|notes?|flavou?rs?|cup profile|we taste|tastes? like|cup)\b\s*(?:of)?\s*[:\-–]?\s*(.*)/i.exec(l.t))) return;
+    used.add(l.t);
+    let rest = m[1];
+    if (!rest && lines[i + 1]) { rest = lines[i + 1].t; used.add(rest); }
+    rest.split(/[,;/&·•+]|\band\b/i).forEach(addNote);
+  });
+  let left = lines.filter((l) => !used.has(l.t)).map((l) => l.t).join('\n').toLowerCase();
+  SCAN_PROCS.forEach((p) => { left = left.replace(p[1], ' '); });
+  [].concat.apply([], FLAVOR_GROUPS.map((g) => g[1])).concat(S.flavors).sort((a, b) => b.length - a.length).forEach((f) => {
+    const r = wordRe(f); if (r.test(left)) { addNote(f); left = left.replace(r, ' '); }
+  });
+  // name: the biggest line of words that isn't one of the above
+  const skip = (t) => used.has(t) || LABEL_RE.test(t) || /\d{2,}|@|www|\.com|https?:/i.test(t) || (t.replace(/[^a-z]/gi, '').length / t.length) < 0.6 ||
+    t.replace(/[^a-z]/gi, '').length < 3 || t.length > 40 || [o.roaster, o.origin, o.farm].some((v) => v && tidy(t).toLowerCase() === v.toLowerCase()) ||
+    SCAN_PROCS.some((p) => p[1].test(t.toLowerCase()) && t.split(' ').length <= 3);
+  const names = lines.filter((l) => !skip(l.t));
+  const top = names.slice().sort((a, b) => b.h - a.h)[0];
+  if (top) o.name = tidy(top.t);
+  return o;
+}
+
 function fillFromScan(B, o) {
   const filled = [], cap1 = (v) => String(v || '').trim();
   ['name', 'roaster', 'origin', 'farm'].forEach((k) => { if (cap1(o[k]) && !cap1(B[k])) { B[k] = cap1(o[k]); filled.push(k); } });
-  if (cap1(o.process) && !B.process) { const p = PROCESSES.concat(S.processes).find((x) => x.toLowerCase() === cap1(o.process).toLowerCase()); B.process = p || cap(cap1(o.process)); }
-  if (o.roast >= 1 && o.roast <= 5) B.roast = Math.round(o.roast);
+  if (cap1(o.process) && !B.process) { const p = PROCESSES.concat(S.processes).find((x) => x.toLowerCase() === cap1(o.process).toLowerCase()); B.process = p || cap(cap1(o.process)); filled.push('process'); }
+  if (o.roast >= 1 && o.roast <= 5) { B.roast = Math.round(o.roast); filled.push('roast'); }
   if (/^\d{4}-\d{2}-\d{2}$/.test(cap1(o.roastDate)) && !B.roastDate) { B.roastDate = cap1(o.roastDate); filled.push('roastDate'); }
   if (num(o.weight) > 0 && !hasVal(B.weight)) { B.weight = String(Math.round(num(o.weight))); filled.push('weight'); }
   if (num(o.price) > 0 && !hasVal(B.price)) { B.price = String(r1(num(o.price) * 10) / 10); filled.push('price'); }
-  (Array.isArray(o.notes) ? o.notes : []).forEach((n) => { n = cap(cap1(n)); if (n && B.notes.map((x) => x.toLowerCase()).indexOf(n.toLowerCase()) < 0) B.notes.push(n); });
+  (Array.isArray(o.notes) ? o.notes : []).forEach((n) => { n = cap(cap1(n)); if (n && B.notes.map((x) => x.toLowerCase()).indexOf(n.toLowerCase()) < 0) { B.notes.push(n); if (filled.indexOf('notes') < 0) filled.push('notes'); } });
   B._filled = filled;
+  return filled.length;
+}
+function scanMsg(m) {
+  const el = document.getElementById('scan-msg'); if (!el) return;
+  if (/loading|initializ/.test(m.status)) el.textContent = 'Getting the reader ready… (first scan downloads it once)';
+  else if (/recogniz/.test(m.status)) el.textContent = 'Reading the label… ' + Math.round((m.progress || 0) * 100) + '%';
 }
 async function scanFile(file) {
-  const B = DR.B, cfg = window.COFFEE_CLOUD || {};
+  const B = DR.B;
   B._scan = 'reading'; B._scanErr = ''; rerender();
+  ocrLog = scanMsg;
   try {
-    const image = await shrinkPhoto(file), token = await Cloud.token();
-    if (!token) throw Object.assign(new Error(''), { status: 401 });
-    const res = await fetch(cfg.url.replace(/\/$/, '') + '/functions/v1/scan-bag', {
-      method: 'POST', headers: { 'Content-Type': 'application/json', apikey: cfg.key, Authorization: 'Bearer ' + token },
-      body: JSON.stringify({ image: image, mediaType: 'image/jpeg' })
-    });
-    const out = await res.json().catch(() => ({}));
-    if (!res.ok) throw Object.assign(new Error(out.error || ''), { status: res.status });
+    const canvas = await shrinkPhoto(file);
+    let lines;
+    try { lines = await readLabel(canvas); }
+    catch (e) { throw new Error(navigator.onLine ? 'The text reader didn’t load. Try again.' : 'Connect to the internet once so the text reader can download. After that, scanning works offline.'); }
     if (DR.B !== B) return;
-    fillFromScan(B, out); B._scan = 'done';
+    B._ocr = lines.map((l) => l.t).join('\n');
+    const n = fillFromScan(B, parseLabel(lines));
+    B._scan = n ? 'done' : '';
+    if (!n) B._scanErr = lines.length ? 'Couldn’t pick out any details. Fill them in below, or try a closer photo of the label.' : 'Couldn’t find any text. Try a sharper photo, straight on, in good light.';
   } catch (e) {
     if (DR.B !== B) return;
-    B._scan = ''; B._scanErr = scanError(e);
+    B._scan = ''; B._scanErr = (e && e.message) || 'Couldn’t read the label.';
+  } finally {
+    ocrLog = null; ocrRest();
   }
   rerender();
 }
@@ -1582,7 +1748,7 @@ const A = {
     if (!String(b.name).trim()) { toast('Add a name'); const f = document.getElementById('f-name'); if (f) f.focus(); return; }
     ['name', 'roaster', 'farm', 'origin'].forEach((k) => { b[k] = String(b[k] || '').trim(); });
     const isNew = !b.id;
-    delete b._k; delete b._from; delete b.rating; delete b._scan; delete b._scanErr; delete b._filled;
+    delete b._k; delete b._from; delete b.rating; delete b._scan; delete b._scanErr; delete b._filled; delete b._ocr;
     const builtIn = [].concat.apply([], FLAVOR_GROUPS.map((g) => g[1])).map((x) => x.toLowerCase());
     b.notes.forEach((n) => { if (builtIn.indexOf(n.toLowerCase()) < 0 && S.flavors.indexOf(n) < 0) S.flavors.push(n); });
     if (b.process && PROCESSES.indexOf(b.process) < 0 && S.processes.indexOf(b.process) < 0) S.processes.push(b.process);
@@ -1714,8 +1880,6 @@ const A = {
     rerender(); toast('Using last time’s settings');
   },
   scanBag: () => {
-    const B = DR.B;
-    if (!Cloud.user()) { B._scanErr = 'Sign in first (person icon, top right of Brew) to scan bags.'; rerender(); return; }
     const i = document.getElementById('scan-in'); if (i) { i.value = ''; i.click(); }
   },
   shareCup: async (d, el) => {
