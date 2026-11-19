@@ -997,7 +997,7 @@ function vAccount() {
   if (U.step === 'code') {
     const sending = U.state === 'sending', busy = U.state === 'verifying';
     return h + '<div class="card"><div class="small" id="auth-msg" role="status">' + authMsg(U) + '</div>' +
-      '<div class="field"><label for="f-code">6-digit code</label><input id="f-code" class="code" data-o="U" data-f="code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="10" value="' + esc(U.code || '') + '" aria-describedby="auth-msg"></div>' +
+      '<div class="field"><label for="f-code">' + OTP_LEN + '-digit code</label><input id="f-code" class="code" data-o="U" data-f="code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="10" value="' + esc(U.code || '') + '" aria-describedby="auth-msg"></div>' +
       err + '<button class="btn sm" data-a="verifyCode"' + (busy ? ' disabled' : '') + '>' + (busy ? '<i class="spin" aria-hidden="true"></i>Signing in…' : 'Sign in') + '</button>' +
       '<div class="rowb"><button class="link" data-a="codeBack">Use another email</button><button class="link" id="resend" data-a="resendCode"' + (sending || resendWait(U) ? ' disabled' : '') + '>' + resendLabel(U) + '</button></div></div></div>';
   }
@@ -1008,6 +1008,9 @@ function vAccount() {
 }
 // the sign-in draft survives a reload, so switching to Mail and back keeps you on the code step
 const AUTH_KEY = 'coffee-signin';
+// code length set in Supabase; codes of 6–10 digits are still accepted if it changes
+const OTP_LEN = Math.min(10, Math.max(6, +((window.COFFEE_CLOUD || {}).otpLength) || 6));
+let otpWait = null;
 function authDraft() {
   if (!DR.U) {
     let u = null;
@@ -1536,7 +1539,8 @@ const A = {
   verifyCode: async () => {
     const U = authDraft(), code = String(U.code || '').replace(/\D/g, '');
     if (U.state === 'verifying' || U.state === 'sending' && !code) return;
-    if (code.length < 6) { U.err = 'Enter the 6-digit code from the email.'; rerender(); const f = document.getElementById('f-code'); if (f) f.focus(); return; }
+    clearTimeout(otpWait);
+    if (code.length < 6) { U.err = 'Enter the ' + OTP_LEN + '-digit code from the email.'; rerender(); const f = document.getElementById('f-code'); if (f) f.focus(); return; }
     U.state = 'verifying'; U.err = ''; rerender();
     try { await Cloud.verify(U.email, code); DR.U = null; keepAuthDraft(); toast('Signed in'); if (/^#\/?account/.test(location.hash)) rerender(); }
     catch (e) { if (DR.U !== U) return; U.state = 'sent'; U.err = authError(e); U.code = ''; rerender(); const f = document.getElementById('f-code'); if (f) f.focus(); }
@@ -1605,7 +1609,10 @@ document.addEventListener('input', (e) => {
     const v = el.value.replace(/\D/g, '');
     if (v !== el.value) el.value = v;
     DR.U.code = v;
-    if (v.length === 6) A.verifyCode();
+    // sign in as soon as the whole code is in; a code of another length (6–10) goes after a short pause
+    clearTimeout(otpWait);
+    if (v.length === OTP_LEN) A.verifyCode();
+    else if (v.length >= 6) otpWait = setTimeout(() => { if (DR.U && DR.U.code === v) A.verifyCode(); }, 1500);
     return;
   }
   if (!el.dataset || !el.dataset.o || !DR[el.dataset.o]) return;

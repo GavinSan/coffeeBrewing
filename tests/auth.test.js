@@ -31,7 +31,8 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   await p.fill('#f-email', 'Me@Example.com ');
   const t0 = Date.now(); await p.click('[data-a=sendCode]');
   await p.waitForSelector('#f-code', { timeout: 1000 });
-  ok(Date.now() - t0 < 800 && /Sending a code/.test(await p.textContent('#auth-msg')), 'code step shows at once with "Sending…" (' + (Date.now() - t0) + ' ms)');
+  // the mock holds the send for 1.5 s, so "Sending…" proves the screen moved on before the email went out
+  ok(/Sending a code/.test(await p.textContent('#auth-msg')) && mock.otpCalls === 1, 'code step shows before the email has gone out (' + (Date.now() - t0) + ' ms)');
   ok(await p.evaluate(() => document.activeElement.id) === 'f-code', 'code box gets focus');
   const attrs = await p.$eval('#f-code', (el) => [el.placeholder, el.autocomplete, el.inputMode]);
   ok(attrs[0] === '' && attrs[1] === 'one-time-code' && attrs[2] === 'numeric', 'no sample code as placeholder; one-time-code autofill, number pad');
@@ -64,6 +65,25 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   await p.fill('#f-code', '424242');
   await p.waitForSelector('#sync-status');
   ok(await p.evaluate(() => !localStorage.getItem('coffee-signin')), 'signed in; draft cleared');
+  // a project set to 8-digit codes: 6 digits must not sign in early, 8 digits sign in straight away
+  const ctx8 = await b.newContext({ ...devices['iPhone 13'], serviceWorkers: 'block' });
+  let verifies = 0;
+  await ctx8.route('**/config.js', (r) => r.fulfill({ contentType: 'text/javascript', body: "window.COFFEE_CLOUD={url:'" + SB + "',key:'test-key',otpLength:8};" }));
+  await ctx8.route(SB + '/**', async (r) => {
+    const u = new URL(r.request().url());
+    if (u.pathname === '/auth/v1/otp') return r.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+    if (u.pathname === '/auth/v1/verify') { verifies++; return r.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ code: 403, error_code: 'otp_expired', msg: 'Token has expired or is invalid' }) }); }
+    return r.fulfill({ status: 404, body: '{}' });
+  });
+  const q = await ctx8.newPage(); q.on('pageerror', (e) => errs.push(e.message));
+  await q.goto(BASE + '#account'); await q.waitForSelector('#f-email');
+  await q.fill('#f-email', 'me@example.com'); await q.click('[data-a=sendCode]');
+  await q.waitForFunction(() => /We sent/.test((document.getElementById('auth-msg') || {}).textContent || ''));
+  ok(/8-digit code/.test(await q.textContent('label[for=f-code]')), '8-digit project: label says 8-digit code');
+  await q.type('#f-code', '268741'); await wait(600);
+  ok(verifies === 0, '8-digit project: 6 digits do not sign in early');
+  await q.type('#f-code', '36'); await q.waitForSelector('.err');
+  ok(verifies === 1, '8-digit project: 8th digit signs in at once');
   ok(errs.length === 0, 'no page errors ' + errs.join(' | '));
   await b.close(); console.log(fails ? fails + ' FAILED' : 'ALL PASSED');
   process.exit(fails ? 1 : 0);

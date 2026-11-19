@@ -1,0 +1,14 @@
+<!--
+  Sign-in email for Coffee Brewing. The app signs in with the code, so the email shows the code and has no link
+  (a link would open Safari instead of the installed app).
+
+  Paste into Supabase → Authentication → Emails, in BOTH "Confirm signup" and "Magic Link":
+    Subject:  Your Coffee Brewing code: {{ .Token }}
+    Body:     everything below this comment
+-->
+<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:420px;margin:0 auto;padding:24px;color:#1F140D">
+  <h2 style="margin:0 0 8px;font-size:20px">Your sign-in code</h2>
+  <p style="margin:0 0 16px;color:#5A4636">Enter this code in Coffee Brewing:</p>
+  <p style="margin:0 0 16px;padding:16px;border-radius:12px;background:#F4EEE6;font-family:Menlo,Consolas,monospace;font-size:32px;font-weight:700;letter-spacing:6px;text-align:center">{{ .Token }}</p>
+  <p style="margin:0;color:#5A4636;font-size:14px">The code expires soon. If you didn't ask for it, you can ignore this email.</p>
+</div>
