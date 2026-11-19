@@ -726,8 +726,13 @@ function vTimer() {
   h += '<div class="pour" id="t-pour"><div class="rowb"><span class="gnow" id="t-gnow">0 g</span><span id="t-gto"></span></div><div class="pbar"><i id="t-pb"></i></div></div>';
   h += '<div class="wrap" id="t-cd" style="justify-content:center;align-items:center"><span class="small muted">Countdown</span>' +
     [3, 5].map((n) => '<button class="chip sm' + (S.countdown === n ? ' on' : '') + '" data-a="setCd" data-n="' + n + '" aria-pressed="' + (S.countdown === n) + '">' + n + 's</button>').join('') + '</div>';
-  h += '<div class="stack grow" style="gap:6px">' + P2.steps.map((s, i) => '<div class="tstep" id="ts-' + i + '"><div style="display:flex;align-items:center;gap:8px;min-width:0"><div class="tm">' + fmt(s.t) + '</div><div class="one">' + esc(s.label) + (s.temp != null ? ' <span class="tt">' + s.temp + '°</span>' : '') + '</div></div>' +
-    (s.g != null ? '<div class="g">' + s.g + ' g</div>' : '') + '</div>').join('') + '</div>';
+  // steps as a carousel: the current one is centred, finished ones slide off to the left (swipe back to see them)
+  h += '<div class="rail" id="t-rail" role="list" aria-label="Steps">' + P2.steps.map((s, i) => '<div class="tstep" id="ts-' + i + '" role="listitem">' +
+    '<div class="tm">' + fmt(s.t) + '<i class="ck" aria-label="done">' + I(IC.check, 14) + '</i></div>' +
+    '<div class="one tl">' + esc(s.label) + (s.temp != null ? ' <span class="tt">' + s.temp + '°</span>' : '') + '</div>' +
+    '<div class="g">' + (s.g != null ? s.g + ' g' : '&nbsp;') + '</div></div>').join('') + '</div>';
+  h += '<div class="grow"></div>';
+  // controls stay on screen however long the recipe is
   h += '<div class="tctl"><button class="ib" style="justify-self:start;width:56px;height:56px;border-radius:28px" data-a="tReset" aria-label="Restart">' + I(IC.reset) + '</button>' +
     '<button class="play" id="t-main" data-a="tToggle" aria-label="Start">' + PLAY + '</button>' +
     '<button class="btn done" style="justify-self:end" data-a="tDone">' + I(IC.check) + 'Done</button></div>';
@@ -1150,10 +1155,18 @@ function rerender() {
 }
 
 // ---------- timer ----------
+// centre a step card in the carousel
+function railTo(i, smooth) {
+  const rail = document.getElementById('t-rail'), el = document.getElementById('ts-' + Math.max(0, i));
+  if (!rail || !el) return;
+  const left = el.offsetLeft - (rail.clientWidth - el.offsetWidth) / 2;
+  rail.scrollTo({ left: Math.max(0, left), behavior: smooth && !reduced() ? 'smooth' : 'auto' });
+}
 function initTimer() {
   if (!T) T = { phase: 'idle', base: 0, startAt: 0, cdEnd: 0, idx: -1, iv: null, cdShown: null, btn: '', pouring: false };
   T.btn = '';
   paintTimer();
+  railTo(T.idx, false);
 }
 function elapsedNow() { return T.phase === 'run' ? T.base + (Date.now() - T.startAt) / 1000 : T.base; }
 function beep(freq, ms) {
@@ -1190,7 +1203,7 @@ function paintTimer() {
   const P2 = plan(DR.D);
   const cap = document.getElementById('t-cap'), act = document.getElementById('t-act'), wave = document.getElementById('wave');
   const gnow = document.getElementById('t-gnow'), gto = document.getElementById('t-gto'), pb = document.getElementById('t-pb');
-  document.getElementById('t-cd').style.visibility = T.phase === 'idle' ? 'visible' : 'hidden';
+  document.getElementById('t-cd').hidden = T.phase !== 'idle';
   if (T.phase === 'count') {
     const leftS = Math.ceil((T.cdEnd - Date.now()) / 1000);
     if (leftS <= 0) { T.phase = 'run'; T.startAt = Date.now(); T.base = 0; T.idx = -1; }
@@ -1203,7 +1216,7 @@ function paintTimer() {
   const el = elapsedNow();
   let idx = -1;
   if (T.phase !== 'idle') P2.steps.forEach((s, i) => { if (el >= s.t) idx = i; });
-  if (T.phase === 'run' && idx !== T.idx) { T.idx = idx; beep(880, 220); if (navigator.vibrate) navigator.vibrate(120); }
+  if (T.phase === 'run' && idx !== T.idx) { T.idx = idx; beep(880, 220); if (navigator.vibrate) navigator.vibrate(120); railTo(idx, true); }
   P2.steps.forEach((s, i) => { document.getElementById('ts-' + i).className = 'tstep' + (i === idx ? ' now' : (i < idx ? ' past' : '')); });
   clock.textContent = fmt(el);
 
@@ -1442,7 +1455,7 @@ const A = {
     else if (T.phase === 'paused') { T.startAt = Date.now(); T.phase = 'run'; }
     paintTimer();
   },
-  tReset: () => { if (!T) return; clearInterval(T.iv); const ac = T.ac; T = { phase: 'idle', base: 0, startAt: 0, cdEnd: 0, idx: -1, iv: null, cdShown: null, ac: ac, btn: '', pouring: false }; paintTimer(); },
+  tReset: () => { if (!T) return; clearInterval(T.iv); const ac = T.ac; T = { phase: 'idle', base: 0, startAt: 0, cdEnd: 0, idx: -1, iv: null, cdShown: null, ac: ac, btn: '', pouring: false }; paintTimer(); railTo(0, true); },
   tDone: () => logBrew(T && (T.phase === 'run' || T.phase === 'paused') ? Math.round(elapsedNow()) : null),
   rate: (d) => { DR.Q = null; go('rate/' + d.id); },
   skipRate: (d) => { const w = S.brews.find((x) => x.id === d.id); if (w) { w.skip = true; save(); } rerender(); },
