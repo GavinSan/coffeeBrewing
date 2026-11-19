@@ -263,7 +263,11 @@ function fullDate() { const d = new Date(); return DOW[d.getDay()] + ', ' + MONT
 const bean = (id) => S.beans.find((b) => b.id === id);
 const brewsOf = (id) => S.brews.filter((w) => w.beanId === id);
 const used = (id) => brewsOf(id).reduce((a, w) => a + num(w.dose), 0);
-const left = (b) => Math.max(0, r1(num(b.weight) - used(b.id)));
+// grams left: weight minus what was brewed, plus any correction the owner made (leftFix)
+const left = (b) => Math.max(0, r1(num(b.weight) - used(b.id) + num(b.leftFix)));
+const usualDose = (b) => { const ws = brewsOf(b.id); return ws.length ? num(ws[ws.length - 1].dose) || 15 : 15; };
+const cupsLeft = (b) => Math.floor(left(b) / usualDose(b));
+const isLow = (b) => !b.finishDate && num(b.weight) > 0 && cupsLeft(b) <= 2;
 const perG = (b) => (num(b.price) > 0 && num(b.weight) > 0 ? num(b.price) / num(b.weight) : null);
 const method = (id) => METHODS.find((m) => m.id === id) || METHODS[0];
 const dripper = (id) => DRIPPERS.find((d) => d.id === id);
@@ -404,10 +408,16 @@ function beanRow(b, o) {
   const s = beanStars(b), d = days(b.roastDate, today()), wt = num(b.weight), ri = roastI(b);
   const right = o.brew ? '<span class="go" aria-hidden="true">' + I(IC.drop, 20) + '</span>'
     : '<div class="rt">' + (s != null ? '<div class="fw">' + s.toFixed(1) + ' ' + STAR_S + '</div>' : '') +
-      '<div class="small muted">' + (b.finishDate ? 'Done ' + md(b.finishDate) : [d != null ? 'Day ' + d : null, wt ? left(b) + ' g' : null].filter(Boolean).join(' · ')) + '</div></div>';
+      '<div class="small muted">' + (b.finishDate ? 'Done ' + md(b.finishDate) : (d != null ? 'Day ' + d : '')) + '</div></div>';
+  let gauge = '';
+  if (b.finishDate) gauge = '<div class="mm done"><span>Finished ' + md(b.finishDate) + ' · ' + plural(brewsOf(b.id).length, 'cup') + '</span></div>';
+  else if (wt) {
+    const low = isLow(b), l = left(b);
+    gauge = '<div class="mm' + (low ? ' low' : '') + '"><span class="mbar"><i style="width:' + Math.round(l / wt * 100) + '%"></i></span><span class="nowrap">' + l + ' g · ' + (low ? (cupsLeft(b) ? 'running low' : 'almost out') : '~' + plural(cupsLeft(b), 'cup')) + '</span></div>';
+  }
   return '<button class="row" data-a="' + (o.act || (o.brew ? 'startBrew' : 'openBean')) + '" data-id="' + b.id + '"' + (o.brew ? ' aria-label="Brew ' + esc(b.name) + '"' : '') + '>' +
     '<span class="dot" style="background:' + ROAST_C[ri - 1] + '" title="' + ROASTS[ri - 1] + ' roast"></span>' +
-    '<div class="grow" style="min-width:0"><div class="one fw">' + esc(b.name) + '</div><div class="small muted one">' + esc([b.roaster, b.origin, b.process].filter(Boolean).join(' · ') || 'No details yet') + '</div></div>' + right + '</button>';
+    '<div class="grow" style="min-width:0"><div class="one fw">' + esc(b.name) + '</div><div class="small muted one">' + esc([b.roaster, b.origin, b.process].filter(Boolean).join(' · ') || 'No details yet') + '</div>' + gauge + '</div>' + right + '</button>';
 }
 function brewRow(w, o) {
   o = o || {};
@@ -453,7 +463,8 @@ function heroCard(b) {
     (d != null ? '<div class="tag" title="Days since roast">Day ' + d + '</div>' : '') + '</div>';
   if (wt) {
     const per = w ? num(w.dose) || 15 : 15;
-    h += '<div class="stack" style="gap:6px">' + meter(b) + '<div class="rowb small"><span class="fw">' + left(b) + ' g left</span><span class="muted">about ' + plural(Math.floor(left(b) / per), 'cup') + '</span></div></div>';
+    h += '<div class="stack' + (isLow(b) ? ' low' : '') + '" style="gap:6px">' + meter(b) + '<div class="rowb small"><span class="fw">' + left(b) + ' g left</span><span class="muted">about ' + plural(Math.floor(left(b) / per), 'cup') + '</span></div></div>';
+    if (isLow(b)) h += '<div class="hint warn">' + I(IC.info, 18) + '<span class="grow">Running low. Restock soon?</span><button class="btn sm ghost" data-a="buyAgain" data-id="' + b.id + '">Buy again</button></div>';
   }
   if (w) {
     const rc = recipe(w.recipeId);
@@ -502,6 +513,8 @@ function vBeanView(b) {
   h += '<div class="card">';
   h += '<div class="rowb">' + (wt ? '<div><span class="big">' + left(b) + ' g</span><span class="muted"> of ' + wt + ' g</span></div>' : '<div class="muted">No weight set</div>') +
     (b.finishDate ? '<span class="tag soft">Finished</span>' : (d != null ? '<span class="tag" title="Days since roast">Day ' + d + '</span>' : '')) + '</div>' + meter(b);
+  if (wt && !b.finishDate) h += '<div class="rowb small"><span class="muted">' + (isLow(b) ? 'Running low · ' : '') + 'about ' + plural(cupsLeft(b), 'cup') + ' left</span>' +
+    '<span><button class="link" style="min-height:32px" data-a="fixLeft" data-id="' + b.id + '">Correct</button><button class="link" style="min-height:32px" data-a="finishNow" data-id="' + b.id + '">Finished it</button></span></div>';
   const fact = (k, v) => '<div><div class="k">' + k + '</div><div class="v">' + v + '</div></div>';
   h += '<div class="facts">' + fact('Roast', rbar(ri) + '<span class="one">' + ROASTS[ri - 1] + '</span>') + fact('Process', esc(b.process || '—')) +
     fact('Origin', esc(b.origin || '—')) + fact('Farm', '<span class="one">' + esc(b.farm || '—') + '</span>') +
@@ -636,6 +649,21 @@ function added(b) {
     '<div class="small muted">Added to your shelf</div><h2>' + esc(b.name) + '</h2>' +
     '<div class="small muted">' + esc([b.roaster, b.origin, b.process].filter(Boolean).join(' · ')) + '</div>' +
     '<button class="btn" data-a="addedBrew" data-id="' + b.id + '">' + I(IC.drop) + 'Brew it now</button><button class="btn ghost" data-a="addedDone">Later</button></div>';
+  el.className = 'on';
+}
+// a bag is used up: show what it gave, then offer to buy it again
+function bagDone(b) {
+  const ws = brewsOf(b.id), st = ws.map((w) => w.stars).filter((n) => n > 0), p = num(b.price);
+  const lasted = days(b.openDate || b.buyDate, b.finishDate || today());
+  const best = ws.filter((w) => w.stars).sort((x, y) => y.stars - x.stars || (y.at || 0) - (x.at || 0))[0];
+  const tile = (k, v) => '<div class="stat"><div class="k">' + k + '</div><div class="v">' + v + '</div></div>';
+  const el = document.getElementById('fall');
+  el.innerHTML = scene({ cls: 'full', tall: true }) + '<div class="addcard" role="dialog" aria-modal="true" aria-label="Bag finished">' +
+    '<div class="small muted">Bag finished</div><h2>' + esc(b.name) + '</h2>' +
+    '<div class="g2" style="text-align:left">' + tile('Cups', String(ws.length)) + tile('Lasted', lasted != null ? plural(Math.max(1, lasted), 'day') : '—') +
+      tile('Avg rating', st.length ? avg(st).toFixed(1) + ' ' + STAR_S : '—') + tile('Per cup', p > 0 && ws.length ? money(p / ws.length) : '—') + '</div>' +
+    (best ? '<div class="small muted">Best cup: ' + esc([brewerName(best), (recipe(best.recipeId) || {}).name].filter(Boolean).join(' · ')) + ' · ' + best.stars + ' ' + STAR_S + '</div>' : '') +
+    '<button class="btn" data-a="doneBuyAgain" data-id="' + b.id + '">' + I(IC.copy) + 'Buy it again</button><button class="btn ghost" data-a="doneClose">Done</button></div>';
   el.className = 'on';
 }
 function closeAdded() { const el = document.getElementById('fall'); el.className = ''; el.innerHTML = ''; }
@@ -1517,7 +1545,8 @@ function logBrew(elapsed) {
     if (!b.openDate) b.openDate = today();
     if (num(b.weight) > 0 && left(b) <= 0 && !b.finishDate) b.finishDate = today();
   }
-  save(); DR.D = null; go('brew'); toast('Logged · rate it after a sip');
+  save(); DR.D = null; go('brew');
+  if (b && b.finishDate === today() && left(b) <= 0) bagDone(b); else toast('Logged · rate it after a sip');
 }
 
 const A = {
@@ -1562,6 +1591,19 @@ const A = {
     if (isNew) added(b); else back('bean/' + b.id);
   },
   addedBrew: (d) => { closeAdded(); startBrew(d.id, true); },
+  doneBuyAgain: (d) => { closeAdded(); const b = bean(d.id); if (b) { DR.B = copyOf(b); go('bean/new'); } },
+  doneClose: () => { closeAdded(); },
+  finishNow: (d) => { const b = bean(d.id); if (!b) return; sheet({ title: 'Finished ' + b.name + '?', ok: 'Finished', cb: () => { b.finishDate = today(); if (!b.openDate) b.openDate = b.buyDate || today(); save(); rerender(); bagDone(b); } }); },
+  fixLeft: (d) => {
+    const b = bean(d.id); if (!b) return;
+    sheet({ title: 'How many grams are left?', input: true, ph: left(b) + ' g', ok: 'Save', cb: (v) => {
+      const n = parseFloat(String(v).replace(',', '.'));
+      if (!isFinite(n) || n < 0) { toast('Enter grams, e.g. 120'); return; }
+      b.leftFix = r1(num(b.leftFix) + (Math.min(n, num(b.weight)) - left(b)));
+      save(); rerender(); toast(n > 0 ? 'Now ' + left(b) + ' g left' : 'Set to 0 g');
+    } });
+    const i = document.getElementById('sheet-in'); if (i) { i.setAttribute('inputmode', 'decimal'); i.value = String(left(b)); i.select(); }
+  },
   addedDone: () => { closeAdded(); back('beans'); },
   finishBean: () => { DR.B.finishDate = today(); rerender(); },
   delBean: () => sheet({ title: 'Delete ' + DR.B.name + ' and its brews?', ok: 'Delete', danger: true, cb: () => {
@@ -1822,7 +1864,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && e.target.id === 'f-email' && DR.U) A.sendCode();
   if (e.key === 'Enter' && e.target.id === 'f-code' && DR.U) A.verifyCode();
   if (e.key === 'Escape' && SH) closeSheet();
-  if (e.key === 'Escape' && document.getElementById('fall').className === 'on') A.addedDone();
+  if (e.key === 'Escape' && document.getElementById('fall').className === 'on') closeAdded();
 });
 document.addEventListener('input', (e) => {
   const el = e.target;
