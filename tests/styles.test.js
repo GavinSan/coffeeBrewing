@@ -26,7 +26,7 @@ let fails = 0; const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); 
   ok(painted(await bg('.seg button')), 'taste boxes are painted');
   await p.click('.seg button >> nth=2');
   ok(painted(await bg('.seg button.on')), 'picked taste box is painted');
-  await p.goto(BASE + '#brew'); await p.click('.hero [data-a=startBrew]'); await p.waitForSelector('.stepper button');
+  await p.goto(BASE + '#brew'); await p.click('.hero [data-a=startBrew]'); await p.click('[data-a=toRecipe]'); await p.waitForSelector('.stepper button');
   ok(painted(await bg('.stepper button')), 'stepper − / + are painted');
   ok(errs.length === 0, 'no page errors ' + errs.join(' | '));
   await b.close(); console.log(fails ? fails + ' FAILED' : 'ALL PASSED');
