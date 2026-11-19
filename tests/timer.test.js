@@ -15,7 +15,8 @@ let fails = 0; const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); 
       gear: [{ id: 'g', model: 'v60', material: 'Ceramic', size: '02' }], setupSeen: true, grinders: [], recipes: [], filters: [], countdown: 3, updatedAt: 1 })); });
   const settle = async (cond) => { for (let i = 0; i < 40; i++) { if (await cond()) return true; await p.clock.runFor(50); } return cond(); };
   await p.goto(BASE + '#brew'); await settle(async () => (await p.locator('.hero [data-a=startBrew]').count()) > 0);
-  await p.click('.hero [data-a=startBrew]'); await settle(async () => (await p.locator('[data-a=toTimer]').count()) > 0);
+  await p.click('.hero [data-a=startBrew]'); await settle(async () => (await p.locator('[data-a=toRecipe]').count()) > 0);
+  await p.click('[data-a=toRecipe]'); await settle(async () => (await p.locator('[data-a=toTimer]').count()) > 0);
   await p.click('[data-a=toTimer]'); await settle(async () => (await p.locator('#t-rail').count()) > 0);
   await p.clock.runFor(600); await p.waitForTimeout(500); // page ease-in finishes (CSS animation, real time)
   const vh = p.viewportSize().height;

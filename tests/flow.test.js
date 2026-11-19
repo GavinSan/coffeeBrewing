@@ -77,8 +77,9 @@ const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails++
   await p.click('[data-a=saveRate]');
   ok(/grind finer/.test(await txt('.hero')), 'home hero reminds: grind finer');
   await shot('08-home-hero');
-  await p.click('.hero [data-a=startBrew]');
-  ok(p.url().endsWith('#recipe'), 'second brew skips straight to recipe');
+  await p.click('.hero [data-a=startBrew]'); await settle(async () => (await p.locator('[data-a=toRecipe]').count()) > 0);
+  ok(p.url().endsWith('#method') && /Last time with this bag/.test(await txt('#app')), 'second brew: brewer step first, with last time shown');
+  await p.click('[data-a=toRecipe]'); await settle(async () => (await p.locator('[data-a=applyAdj]').count()) > 0);
   await p.click('[data-a=applyAdj]');
   ok(await p.locator('[data-a=applyAdj]').count() === 0, 'apply hint consumed');
 

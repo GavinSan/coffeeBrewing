@@ -373,11 +373,6 @@ body.dark .chip.sm { min-height: 36px; }
 .welcome .steam.s2 { animation-delay: 1s; } .welcome .steam.s3 { animation-delay: 2s; }
 @keyframes steam { 0% { opacity: 0; transform: translateY(4px); } 35% { opacity: .9; } 100% { opacity: 0; transform: translateY(-7px) translateX(1.5px); } }
 .welcome > svg { animation: float 6s ease-in-out infinite; }
-/* steam rising off the coffee while it brews */
-#wave .wisp { position: absolute; top: -78px; width: 26px; height: 60px; opacity: 0; background: no-repeat center / contain url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 26 60'%3E%3Cpath d='M13 58c-7-8 7-14 0-22s7-14 0-22S13 4 15 2' fill='none' stroke='%23F7F1E8' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E"); animation: wisp 4.5s ease-in-out infinite; }
-#wave .wisp:nth-of-type(1) { left: 22%; } #wave .wisp:nth-of-type(2) { left: 50%; animation-delay: 1.5s; } #wave .wisp:nth-of-type(3) { left: 76%; animation-delay: 3s; }
-@keyframes wisp { 0% { opacity: 0; transform: translateY(16px) scaleY(.8); } 30% { opacity: .28; } 100% { opacity: 0; transform: translateY(-26px) translateX(6px) scaleY(1.1); } }
-body:not(.brewing) #wave .wisp { display: none; }
 /* beans land with a soft bounce and a puff */
 #fall .pile i { animation: drop .9s var(--spring) both; }
 @keyframes drop { 0% { transform: translateY(-110vh) rotate(calc(var(--r) - 160deg)); } 70% { transform: translateY(0) rotate(var(--r)); } 82% { transform: translateY(-9px) rotate(calc(var(--r) + 6deg)); } 100% { transform: translateY(0) rotate(var(--r)); } }
@@ -386,7 +381,7 @@ body:not(.brewing) #wave .wisp { display: none; }
 #fall .addcard { animation: cardin .6s .25s var(--spring) both; }
 @keyframes cardin { from { opacity: 0; transform: translateY(26px) scale(.96); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) {
-  .rise, .meter i, .chart .bar, .welcome .steam, .welcome > svg, .gearhero .mat, #wave .wisp, #fall .pile b, #fall .addcard, .tile.pick .ck, #toast.on { animation: none; }
+  .rise, .meter i, .chart .bar, .welcome .steam, .welcome > svg, .gearhero .mat, #fall .pile b, #fall .addcard, .tile.pick .ck, #toast.on { animation: none; }
   .welcome .steam { opacity: .8; }
 }
 
@@ -448,3 +443,50 @@ body:not(.brewing) #wave .wisp { display: none; }
 #t-cd[hidden] { display: none; }
 .tctl { position: sticky; bottom: 0; z-index: 2; padding: 8px 0 calc(8px + env(safe-area-inset-bottom)); margin-bottom: -16px; }
 @media (prefers-reduced-motion: reduce) { .rail .tstep { transition: none; } }
+
+/* ---------- brewing: coffee with depth ---------- */
+#wave { background: linear-gradient(180deg, #8A5631 0, #5B371D 12%, #3A2213 42%, #22130A 100%); }
+#wave::after { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 18px; background: linear-gradient(rgba(214, 160, 104, .55), rgba(138, 86, 49, 0)); pointer-events: none; }
+#wave .liq { position: absolute; inset: 0; overflow: hidden; }
+#wave .sheen { position: absolute; inset: -25%; background: radial-gradient(38% 26% at 28% 22%, rgba(255, 214, 170, .12), transparent 70%), radial-gradient(30% 22% at 74% 46%, rgba(255, 214, 170, .08), transparent 70%); animation: sheen 18s ease-in-out infinite alternate; }
+@keyframes sheen { to { transform: translate(9%, 5%) rotate(4deg); } }
+#wave em { position: absolute; bottom: -8px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, rgba(255, 242, 224, .75), rgba(255, 226, 190, .12)); opacity: 0; visibility: hidden; animation: bub 8s linear infinite paused; }
+body.brewing #wave em { visibility: visible; animation-play-state: running; }
+@keyframes bub { 0% { transform: translate(0, 0); opacity: 0; } 12% { opacity: .85; } 55% { transform: translate(5px, -28vh); } 100% { transform: translate(-4px, -56vh); opacity: 0; } }
+/* surface: two long, smooth waves; they lift when you pour and settle while it drains */
+#wave .surf { position: absolute; left: 0; right: 0; top: 0; height: 0; transform-origin: 50% 0; transition: transform .8s var(--ease); }
+body.pouring #wave .surf { transform: scaleY(1.7); }
+#wave .surf i { position: absolute; left: 0; top: -23px; width: calc(100% + 480px); height: 24px; background-repeat: repeat-x; background-size: 240px 24px; }
+#wave .surf i:nth-child(1) { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='24' viewBox='0 0 240 24'%3E%3Cpath d='M0 13C40 4 80 4 120 13S200 22 240 13V24H0Z' fill='%238A5631'/%3E%3C/svg%3E"); animation: wv2 7s linear infinite; }
+#wave .surf i:nth-child(2) { top: -27px; opacity: .5; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='24' viewBox='0 0 240 24'%3E%3Cpath d='M0 13C40 4 80 4 120 13S200 22 240 13V24H0Z' fill='%23C48F5C'/%3E%3C/svg%3E"); animation: wv2 11s linear infinite reverse; }
+@keyframes wv2 { from { transform: translateX(-240px); } to { transform: translateX(0); } }
+/* ripples spread from where the water lands, circling slowly like a spiral pour */
+#wave .rips { position: absolute; left: 50%; top: -8px; width: 0; height: 0; animation: orbit 5s ease-in-out infinite alternate; }
+@keyframes orbit { from { transform: translateX(-36px); } to { transform: translateX(36px); } }
+#wave .rips b { position: absolute; left: -32px; top: -8px; width: 64px; height: 16px; border-radius: 50%; border: 2px solid rgba(255, 230, 200, .5); opacity: 0; }
+body.pouring #wave .rips b { animation: ripple 1.8s ease-out infinite; }
+body.pouring #wave .rips b:nth-child(2) { animation-delay: .6s; }
+body.pouring #wave .rips b:nth-child(3) { animation-delay: 1.2s; }
+@keyframes ripple { 0% { transform: scale(.2); opacity: .9; } 100% { transform: scale(3.4); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  #wave .sheen, #wave em, #wave .rips, #wave .rips b, #wave .surf i { animation: none !important; }
+  #wave .surf { transition: none; }
+}
+
+/* ---------- brew flow, scan, share ---------- */
+.ref { display: flex; flex-direction: column; gap: 2px; padding: 10px 14px; border-radius: 16px; background: rgba(111, 68, 35, .07); box-shadow: inset 0 0 0 1px rgba(111, 68, 35, .12); }
+.ref .rowb { align-items: center; }
+.ref.linkrow { flex-direction: row; align-items: center; justify-content: space-between; gap: 10px; border: none; text-align: left; color: var(--ink); width: 100%; min-height: 56px; }
+.ref.linkrow > svg { color: var(--muted); flex: none; }
+.steprow .small.muted { font-size: 12.5px; }
+.chip.was::after { content: ''; width: 6px; height: 6px; border-radius: 3px; background: currentColor; opacity: .55; margin-left: 2px; }
+.selw.full { display: flex; width: 100%; }
+.selw.full select { width: 100%; min-height: 52px; border-radius: 16px; font-size: 17px; font-weight: 500; padding: 0 40px 0 16px; }
+.scanning { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 56px; border-radius: 28px; font-weight: 650; color: var(--roast);
+  background: linear-gradient(90deg, var(--soft) 0%, #F7EBDC 40%, var(--soft) 80%); background-size: 200% 100%; animation: shimmer 1.4s linear infinite; }
+@keyframes shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+.field.filled input, .field.filled .affix { box-shadow: inset 0 0 0 2px #C9A27C; animation: fillglow 1.6s ease-out 1; }
+@keyframes fillglow { 0% { background: #FBEBD5; } 100% { background: var(--card); } }
+.field .from { font-size: 11.5px; font-weight: 600; color: var(--roast); background: #F3E6D3; border-radius: 8px; padding: 1px 7px; margin-left: 4px; }
+.cardimg { display: block; width: 100%; max-height: 56vh; object-fit: contain; border-radius: 18px; box-shadow: 0 8px 28px rgba(31, 20, 13, .18); }
+@media (prefers-reduced-motion: reduce) { .scanning, .field.filled input, .field.filled .affix { animation: none; } }
