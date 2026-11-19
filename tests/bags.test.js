@@ -58,8 +58,12 @@ let fails = 0; const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); 
   await p.click('[data-a=doneClose]');
   ok(await p.locator('#fall.on').count() === 0, 'Done closes it');
   // a long page scrolled to the end: the tab bar stays at the bottom and nothing ends up underneath it
-  await p.setViewportSize({ width: 375, height: 560 });
-  await p.goto(BASE + '#brew'); await p.waitForSelector('.hero');
+  await p.setViewportSize({ width: 375, height: 300 });
+  await p.goto(BASE + '#gear'); await p.reload(); await p.waitForSelector('#nav a, #nav button');
+  ok(await p.evaluate(() => document.documentElement.scrollHeight > innerHeight + 200), 'page is longer than the screen');
+  // Safari pins a sticky bar inside its parent's box, so body must grow with the page (a 100% body left the bar mid-page on iPhone)
+  const bodyH = await p.evaluate(() => [document.body.getBoundingClientRect().height, document.documentElement.scrollHeight]);
+  ok(bodyH[0] >= bodyH[1] - 1, 'body grows with the page ' + bodyH.join(' / '));
   await p.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight)); await p.waitForTimeout(150);
   const lay = await p.evaluate(() => { const n = document.getElementById('nav').getBoundingClientRect(), bs = [...document.querySelectorAll('#app button')], last = bs[bs.length - 1].getBoundingClientRect();
     return { navBottom: Math.round(n.bottom), vh: innerHeight, lastBottom: Math.round(last.bottom), navTop: Math.round(n.top) }; });
