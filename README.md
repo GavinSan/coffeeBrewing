@@ -7,7 +7,7 @@ A bean-first brew log, built as an installable PWA. No build step — plain HTML
 - **New bag** — roaster, origin and farm suggest what you've typed before; "bought one of these again?" copies a previous bag. Roast is a slider, flavours are grouped and searchable, price and weight take numbers only.
 - **Brew** flow — bag → brewer (last one preselected) → settings, with last time's values shown quietly and one tap to reuse them. Any logged brew can be edited afterwards.
 - **Timer** — the water target rises through each pour at a steady kettle rate (5 g/s), then waits and counts down to the next pour. Steps are a carousel; the coffee surface ripples while you pour.
-- **Scan the bag** — photograph the label and the New bag form fills itself (needs the `scan-bag` edge function, see below).
+- **Scan the bag** — photograph the label and the New bag form fills in name, roaster, origin, farm, process, roast, roast date, weight and tasting notes. Text recognition runs on the phone (Tesseract), so nothing is uploaded, there's no API cost, and it works offline after the first scan.
 - **Share** — a 1080×1350 image of the cup (painting, stars, recipe, taste chart) for stories and posts.
 - **Journal** — 30 days / 90 days / year / all: cups, spend, cost per cup and rating against the previous period, cups per day/week/month, a sortable breakdown by bean, roaster, origin, process or brewer, and a filterable brew log.
 - **Gear** — first run starts here: pick the brewers you own from 27 (cone, flat, wedge, valve, plus French press, AeroPress, siphon, espresso, cold brew), each with its real materials and sizes, or add your own. Brewing then shows only your gear, filters that fit its shape, and recipes it can do (steep and hybrid only for Switch, Clever, Pulsar). Grinders can be manual or electric. Account and backup are under the person icon.
@@ -40,11 +40,6 @@ Sign in under Gear → Account (email code, no password) to keep the log in Supa
 - In Supabase → Authentication → Emails, add `{{ .Token }}` to the **Magic Link** and **Confirm signup** templates so the email shows the code.
 - `vendor/supabase.js` is `@supabase/supabase-js` 2.118.0 (MIT), vendored so there's no build step or CDN.
 
-### Scanning bags (optional)
+### Scanning bags
 
-`supabase/functions/scan-bag/index.ts` reads a bag photo with Claude and returns the fields. To turn it on:
-
-1. Supabase → Edge Functions → Deploy a new function → Via editor → name `scan-bag` → paste the file → keep **Verify JWT** on → Deploy.
-2. Edge Functions → Secrets → add `ANTHROPIC_API_KEY`.
-
-Only signed-in users can scan; each scan is one Claude request with one photo.
+`vendor/tesseract/` is Tesseract.js 7.0.0 with tesseract.js-core 7.0.0 (Apache-2.0) and the English `best_int` model, loaded only when someone taps **Scan the bag** (about 7 MB, once; the browser keeps it). `parseLabel()` in `app.js` turns the recognised lines into fields with plain rules: units for weight, roast-labelled dates, process and flavour words, known countries and regions, and roasters and farms you've entered before.

@@ -167,7 +167,6 @@ window.Cloud = (function () {
   return {
     init: init, enabled: enabled, changed: changed, sync: sync, status: status,
     user: () => user, sendCode: sendCode, verify: verify, signOut: signOut,
-    token: async () => { if (!sb) return null; const r = await sb.auth.getSession(); return r.data && r.data.session ? r.data.session.access_token : null; },
     _merge: merge // for tests
   };
 })();

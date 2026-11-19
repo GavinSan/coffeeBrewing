@@ -1,4 +1,4 @@
-// Brew flow with last-time reference, editing a logged brew, scanning a bag, sharing a cup, and the brewing surface.
+// Brew flow with last-time reference, editing a logged brew, scanning a bag (on-device text recognition), sharing a cup, and the brewing surface.
 const BASE = process.env.BASE || 'http://localhost:8000/';
 const { chromium, devices } = require('playwright');
 const path = require('path');
@@ -8,7 +8,6 @@ const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR
 (async () => {
   const b = await chromium.launch();
   const ctx = await b.newContext({ ...devices['iPhone 13'], serviceWorkers: 'block', acceptDownloads: true });
-  const scan = { status: 200, body: { name: 'Gesha Village', roaster: 'Sey', origin: 'Ethiopia', farm: 'Oma', process: 'natural', roast: 1, roastDate: '2026-11-02', weight: 250, price: 0, notes: ['Jasmine', 'bergamot'] }, calls: 0, auth: '' };
   await ctx.route('**/config.js', (r) => r.fulfill({ contentType: 'text/javascript', body: "window.COFFEE_CLOUD={url:'" + SB + "',key:'test-key',otpLength:6};" }));
   await ctx.route(SB + '/**', async (r) => {
     const u = new URL(r.request().url()), json = (st, body) => r.fulfill({ status: st, contentType: 'application/json', body: JSON.stringify(body) });
@@ -17,7 +16,6 @@ const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR
       const now = Math.floor(Date.now() / 1000), pl = Buffer.from(JSON.stringify({ sub: 'u1', exp: now + 3600, aud: 'authenticated', role: 'authenticated', email: 'me@example.com' })).toString('base64url');
       return json(200, { access_token: 'x.' + pl + '.y', token_type: 'bearer', expires_in: 3600, expires_at: now + 3600, refresh_token: 'r', user: { id: 'u1', aud: 'authenticated', role: 'authenticated', email: 'me@example.com', app_metadata: {}, user_metadata: {}, created_at: new Date().toISOString() } });
     }
-    if (u.pathname === '/functions/v1/scan-bag') { scan.calls++; scan.auth = r.request().headers()['authorization'] || ''; return json(scan.status, scan.body); }
     if (u.pathname === '/rest/v1/brew_state') return r.request().method() === 'GET' ? json(200, []) : json(201, [{ updated_at: 1 }]);
     return json(404, {});
   });
@@ -63,23 +61,36 @@ const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR
   ok(/\.png$/.test(dl.suggestedFilename()), 'image can be saved: ' + dl.suggestedFilename());
   await p.click('#sheet .bg', { position: { x: 20, y: 20 } }); // tap the backdrop above the sheet
 
-  // 4. scan a bag (signed in)
-  await p.goto(BASE + '#bean/new'); await p.click('[data-a=scanBag]');
-  ok(/Sign in first/.test(await p.textContent('.err')), 'scan asks to sign in first');
-  await p.goto(BASE + '#account'); await p.fill('#f-email', 'me@example.com'); await p.click('[data-a=sendCode]');
-  await p.waitForFunction(() => /We sent/.test((document.getElementById('auth-msg') || {}).textContent || '')); await p.fill('#f-code', '123456'); await p.waitForSelector('#sync-status');
-  await p.evaluate(() => { DR.B = null; }); await p.goto(BASE + '#bean/new'); await p.waitForSelector('[data-a=scanBag]');
+  // 4. scan a bag: real text recognition on the device, no upload
+  const T = Date.UTC(2026, 10, 19);
+  const parse = (lines) => p.evaluate(([l, t]) => parseLabel(l, t), [lines, T]);
+  let o = await parse(['ONYX COFFEE LAB', 'COLOMBIA', 'HUILA', 'WASHED', 'NOTES: RED APPLE / CARAMEL / CACAO', '12 OZ', 'ROASTED 11.10.26']);
+  ok(o.origin === 'Colombia' && o.roaster === 'Onyx Coffee Lab' && o.process === 'Washed' && o.weight === 340 && o.roastDate === '2026-10-11' && o.notes.join() === 'Red apple,Caramel,Cacao', 'label rules: caps, ounces, day-first dates, notes line ' + JSON.stringify(o));
+  o = await parse(['Kiambu AA', 'Washed', 'Notes: blackcurrant, honey, grapefruit']);
+  ok(o.process === 'Washed' && o.origin === 'Kenya' && o.notes.indexOf('Honey') >= 0 && o.name === 'Kiambu AA', 'honey as a flavour isn’t the process; region gives the country ' + JSON.stringify(o));
+  o = await parse(['Best before 2027-01-01', 'Roast date: Nov 3, 2026', 'Black honey', 'Yirgacheffe']);
+  ok(o.roastDate === '2026-11-03' && o.process === 'Honey' && o.origin === 'Ethiopia', 'roast date over best-before; black honey ' + JSON.stringify(o));
+  o = await parse(['Roasted 2027-05-01', 'Anaerobic natural', 'Finca El Paraiso', 'sey']);
+  ok(!o.roastDate && o.process === 'Anaerobic' && o.farm === 'Finca El Paraiso' && o.roaster === 'Sey', 'no future dates; farm line; a roaster you know ' + JSON.stringify(o));
+
+  await p.goto(BASE + '#bean/new'); await p.waitForSelector('[data-a=scanBag]');
   await p.fill('#f-weight', '200');
-  await p.setInputFiles('#scan-in', { name: 'bag.png', mimeType: 'image/png', buffer: PNG });
-  await p.waitForSelector('.hint:has-text("Filled from your photo")');
+  const label = await p.evaluate(() => { const c = document.createElement('canvas'); c.width = 900; c.height = 1100; const x = c.getContext('2d'); x.fillStyle = '#EFE6D8'; x.fillRect(0, 0, 900, 1100); x.fillStyle = '#222';
+    x.font = '600 40px sans-serif'; x.fillText('SEY COFFEE', 80, 120); x.font = 'bold 90px serif'; x.fillText('Gesha Village', 80, 290);
+    x.font = '36px sans-serif'; ['Bench Maji, Ethiopia', 'Process: Natural', 'Producer: Adam Overton', 'Tasting notes: jasmine, bergamot', 'Light roast', 'Roasted on 02/11/2026', 'Net wt 250g'].forEach((t, i) => x.fillText(t, 80, 420 + i * 80));
+    return c.toDataURL('image/png').split(',')[1]; });
+  const reqs = []; p.on('request', (r) => { if (!r.url().startsWith(BASE)) reqs.push(r.url()); });
+  await p.setInputFiles('#scan-in', { name: 'bag.png', mimeType: 'image/png', buffer: Buffer.from(label, 'base64') });
+  await p.waitForSelector('.hint:has-text("Filled from the label")', { timeout: 60000 });
   const B = await p.evaluate(() => DR.B);
-  ok(B.name === 'Gesha Village' && B.origin === 'Ethiopia' && B.process === 'Natural' && B.roast === 1 && B.roastDate === '2026-11-02' && B.notes.join() === 'Jasmine,Bergamot', 'scan fills the form');
+  ok(B.name === 'Gesha Village' && B.roaster === 'Sey' && B.origin === 'Ethiopia' && B.farm === 'Adam Overton' && B.process === 'Natural' && B.roast === 1 && B.roastDate === '2026-11-02' && B.notes.join() === 'Jasmine,Bergamot', 'scan reads the label ' + JSON.stringify(B));
   ok(B.weight === '200', 'scan doesn’t overwrite what you typed');
-  ok(/^Bearer x\./.test(scan.auth) && scan.calls === 1, 'scan sends the signed-in token');
+  ok(reqs.length === 0, 'scanning sends nothing off the device ' + reqs.join(' '));
   ok(await p.locator('.field.filled').count() >= 4 && await p.locator('.from').count() >= 4, 'filled fields are marked "from photo"');
-  scan.status = 404; scan.body = {};
-  await p.setInputFiles('#scan-in', { name: 'bag.png', mimeType: 'image/png', buffer: PNG }); await p.waitForSelector('.err');
-  ok(/isn’t set up/.test(await p.textContent('.err')), 'missing scan function explained');
+  ok(/Gesha Village/.test(await p.textContent('details.ocr pre')), 'the text it read can be checked');
+  await p.screenshot({ path: path.join(__dirname, '..', 'test-results', 'scan.png'), fullPage: true });
+  await p.setInputFiles('#scan-in', { name: 'bag.png', mimeType: 'image/png', buffer: PNG }); await p.waitForSelector('.err', { timeout: 60000 });
+  ok(/any text/.test(await p.textContent('.err')), 'a photo with no text is explained');
 
   // 5. brewing surface: no steam, ripples while pouring
   await p.goto(BASE + '#brew'); await p.click('.hero [data-a=startBrew]'); await p.click('[data-a=toRecipe]'); await p.click('[data-a=toTimer]'); await p.waitForSelector('#t-main');

@@ -30,5 +30,5 @@ npm test -- gear.test.js    # one suite
 - Old saves must keep loading: change the state shape only together with `migrate()` and a test.
 - CSS custom properties on `:root` share one namespace: `--soft` is a colour, easing lives in `--ease` / `--spring`. Reusing a name silently turns every `var()` user transparent (`tests/styles.test.js` guards this).
 - Painted scenes (`scene()` in `app.js`) are original art in a hand-painted style; keep them free of any studio's characters, and keep text and icons plain.
-- Bag scanning: the app posts a downscaled JPEG to the `scan-bag` Supabase Edge Function (`supabase/functions/scan-bag/index.ts`), which calls Claude with structured output and only accepts signed-in users. Deploying it and its `ANTHROPIC_API_KEY` secret is done in the Supabase dashboard, not by CI.
+- Bag scanning is on-device OCR: `vendor/tesseract/` (Tesseract.js, lazy-loaded) reads the photo, `parseLabel()` in `app.js` picks fields with rules. No AI or network call; keep it that way (the owner doesn't want token costs). Add label cases to `tests/brew2.test.js` when changing the rules.
 - The brewing surface (`buildWave()`) is ripples, bubbles and a sheen keyed off `body.pouring` / `body.brewing`. No rising steam lines: they read as a bad smell.
