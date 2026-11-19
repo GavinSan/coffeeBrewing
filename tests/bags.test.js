@@ -57,6 +57,13 @@ let fails = 0; const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); 
   ok(/Guji/.test(await p.textContent('#fall .addcard')), 'Finished it (by hand) shows the summary too');
   await p.click('[data-a=doneClose]');
   ok(await p.locator('#fall.on').count() === 0, 'Done closes it');
+  // a long page scrolled to the end: the tab bar stays at the bottom and nothing ends up underneath it
+  await p.setViewportSize({ width: 375, height: 560 });
+  await p.goto(BASE + '#brew'); await p.waitForSelector('.hero');
+  await p.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight)); await p.waitForTimeout(150);
+  const lay = await p.evaluate(() => { const n = document.getElementById('nav').getBoundingClientRect(), bs = [...document.querySelectorAll('#app button')], last = bs[bs.length - 1].getBoundingClientRect();
+    return { navBottom: Math.round(n.bottom), vh: innerHeight, lastBottom: Math.round(last.bottom), navTop: Math.round(n.top) }; });
+  ok(lay.navBottom === lay.vh && lay.lastBottom <= lay.navTop, 'tab bar stays at the bottom, last button above it ' + JSON.stringify(lay));
   ok(errs.length === 0, 'no page errors ' + errs.join(' | '));
   await p.screenshot({ path: require('path').join(__dirname, '..', 'test-results', 'bags.png') });
   await b.close(); console.log(fails ? fails + ' FAILED' : 'ALL PASSED');
