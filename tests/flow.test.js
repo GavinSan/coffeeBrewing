@@ -63,9 +63,11 @@ const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails++
   await p.clock.runFor(3000 + 6500);  // countdown + 6.5 s into the first pour
   const g1 = parseInt(await txt('#t-gnow'));
   ok(g1 > 25 && g1 < 40, 'water ramps during pour 1 (6.5 s): ' + g1 + ' g, ' + await txt('#t-act'));
+  ok(await txt('#t-v1') === '64 g' && parseInt(await txt('#t-v2')) === 64 - g1 && /^\d+ s$/.test(await txt('#t-v3')), 'while pouring: pour-to, still to add and seconds left — ' + await txt('#t-stats'));
   await shot('06-timer-pour');
   await p.clock.runFor(10000);
-  ok(parseInt(await txt('#t-gnow')) === 64 && /drain/i.test(await txt('#t-act')) && /next: Pour 2 in/.test(await txt('#t-gto')), 'after pour: holds at 64 g, waits for pour 2 — ' + await txt('#t-gto'));
+  ok(parseInt(await txt('#t-gnow')) === 64 && /drain/i.test(await txt('#t-act')) && /Next: pour to/i.test(await txt('#t-k1')) && await txt('#t-v1') === '128 g' && /Starts in/i.test(await txt('#t-k3')) && /256 g of 320 g still to pour/.test(await txt('#t-gto')),
+    'after pour: holds at 64 g, shows the next pour, its start and what is left — ' + await txt('#t-stats') + ' | ' + await txt('#t-gto'));
   await shot('07-timer-wait');
   await p.clock.runFor(30000);
   const g2 = parseInt(await txt('#t-gnow'));
