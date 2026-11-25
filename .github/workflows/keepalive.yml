@@ -1,0 +1,28 @@
+# Supabase pauses free projects after 7 days without database activity.
+# Every 3 days this asks the database one small question so the project stays awake.
+# A red run here means the project is paused: restore it in the Supabase dashboard.
+name: Keep Supabase awake
+
+on:
+  schedule:
+    - cron: '17 3 */3 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Query the database
+        run: |
+          url=$(grep -o "url: *'[^']*'" config.js | cut -d"'" -f2)
+          key=$(grep -o "key: *'[^']*'" config.js | cut -d"'" -f2)
+          # Row level security answers with "permission denied" for the public key, which still
+          # means Postgres ran the query. Anything else (paused, 5xx) fails the run.
+          body=$(curl -sS -m 30 "$url/rest/v1/brew_state?select=user_id&limit=1" -H "apikey: $key")
+          echo "$body"
+          echo "$body" | grep -qE '^\[|"42501"'

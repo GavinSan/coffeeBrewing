@@ -40,6 +40,10 @@ Sign in under Gear → Account (email code, no password) to keep the log in Supa
 - In Supabase → Authentication → Emails, add `{{ .Token }}` to the **Magic Link** and **Confirm signup** templates so the email shows the code.
 - `vendor/supabase.js` is `@supabase/supabase-js` 2.118.0 (MIT), vendored so there's no build step or CDN.
 
+### Keeping the free project awake
+
+Supabase pauses free projects after 7 days without activity. `.github/workflows/keepalive.yml` runs one small database query every 3 days so that doesn't happen. If it ever goes red, the project was paused: Supabase dashboard → the project → **Restore**. Data is kept while paused, and the app keeps working on the phone and uploads once the project is back. GitHub stops scheduled workflows after 60 days without commits; re-enable it under Actions if that happens.
+
 ### Scanning bags
 
 `vendor/tesseract/` is Tesseract.js 7.0.0 with tesseract.js-core 7.0.0 (Apache-2.0) and the English `best_int` model, loaded only when someone taps **Scan the bag** (about 7 MB, once; the browser keeps it). `parseLabel()` in `app.js` turns the recognised lines into fields with plain rules: units for weight, roast-labelled dates, process and flavour words, known countries and regions, and roasters and farms you've entered before.
