@@ -1,4 +1,4 @@
-// Brew flow with last-time reference, editing a logged brew, scanning a bag (on-device text recognition), sharing a cup, and the brewing surface.
+// Brew flow with last-time reference, editing a logged brew, scanning a bag (on-device text recognition), sharing a cup, the timer dial, search clearing and suggestion spacing.
 const BASE = process.env.BASE || 'http://localhost:8000/';
 const { chromium, devices } = require('playwright');
 const path = require('path');
@@ -92,11 +92,27 @@ const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR
   await p.setInputFiles('#scan-in', { name: 'bag.png', mimeType: 'image/png', buffer: PNG }); await p.waitForSelector('.err', { timeout: 60000 });
   ok(/any text/.test(await p.textContent('.err')), 'a photo with no text is explained');
 
-  // 5. brewing surface: no steam, ripples while pouring
+  // 5. timer dial: a ring fills with the water, a mark for each pour target, no liquid or bubbles
   await p.goto(BASE + '#brew'); await p.click('.hero [data-a=startBrew]'); await p.click('[data-a=toRecipe]'); await p.click('[data-a=toTimer]'); await p.waitForSelector('#t-main');
-  ok(await p.locator('#wave .wisp').count() === 0 && await p.locator('#wave .rips b').count() === 3 && await p.locator('#wave em').count() === 12, 'surface has ripples and bubbles, no steam');
-  await p.click('#t-main'); await p.waitForFunction(() => document.body.classList.contains('pouring'), null, { timeout: 6000 });
-  ok(true, 'pouring state switches on during a pour');
+  ok(await p.locator('#wave').count() === 0 && await p.locator('.dial .tick').count() >= 1, 'dial with pour marks, no liquid layer');
+  ok(/Pour to/i.test(await p.textContent('#t-k1')) && /Total water/.test(await p.textContent('#t-gto')), 'before starting: first pour and total water shown');
+  await p.click('#t-main'); await p.waitForFunction(() => document.body.classList.contains('pouring'), null, { timeout: 8000 });
+  await p.waitForFunction(() => parseFloat(document.getElementById('t-arc').getAttribute('stroke-dasharray')) > 0, null, { timeout: 4000 });
+  ok(/Still to add/i.test(await p.textContent('#t-k2')) && /Time left/i.test(await p.textContent('#t-k3')), 'pouring: still to add and time left shown, ring fills');
+  await p.screenshot({ path: path.join(__dirname, '..', 'test-results', 'timer-dial.png') });
+
+  // 6. search boxes have a clear button
+  await p.click('[data-a=tReset]').catch(() => {});
+  await p.goto(BASE + '#beans'); await p.waitForSelector('#f-q');
+  ok(!(await p.isVisible('.search .x')), 'no clear button while empty');
+  await p.fill('#f-q', 'kenya'); ok(await p.isVisible('.search .x'), 'clear button shows once there is text');
+  await p.click('.search .x');
+  ok(await p.inputValue('#f-q') === '' && await p.locator('#blist .row').count() === 2 && !(await p.isVisible('.search .x')), 'tapping it empties the search and lists every bag again');
+
+  // 7. suggestions keep a gap from their field
+  await p.goto(BASE + '#bean/new'); await p.fill('#f-origin', 'Co'); await p.waitForSelector('#sg-origin .chip');
+  const gap = await p.evaluate(() => document.querySelector('#sg-origin .chip').getBoundingClientRect().top - document.getElementById('f-origin').getBoundingClientRect().bottom);
+  ok(gap >= 10, 'origin suggestions sit apart from the field: ' + gap + 'px');
   ok(errs.length === 0, 'no page errors ' + errs.join(' | '));
   await b.close(); console.log(fails ? fails + ' FAILED' : 'ALL PASSED');
   process.exit(fails ? 1 : 0);

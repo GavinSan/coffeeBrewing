@@ -480,7 +480,7 @@ function vBeans() {
   const open = S.beans.filter((b) => !b.finishDate).length;
   let h = head('Beans', S.beans.length ? open + ' open · ' + (S.beans.length - open) + ' finished' : '', { right: '<button class="ib pri" data-a="newBean" aria-label="Add a bag">' + I(IC.plus) + '</button>' + avatar() });
   if (!S.beans.length) return h + '<div class="card welcome">' + scene({ cup: true }) + '<h2>No beans yet</h2><div class="muted">Add your first bag to start your shelf.</div><button class="btn" data-a="newBean">' + I(IC.plus) + 'Add a bag</button></div>';
-  h += '<div class="search">' + I(IC.search, 20) + '<input id="f-q" type="search" placeholder="Search name, roaster, origin, flavour" value="' + esc(P.q) + '" autocomplete="off" aria-label="Search beans"></div>';
+  h += '<div class="search' + (P.q ? ' has' : '') + '">' + I(IC.search, 20) + '<input id="f-q" type="search" placeholder="Search name, roaster, origin, flavour" value="' + esc(P.q) + '" autocomplete="off" aria-label="Search beans">' + '<button class="x" data-a="clearQ" data-for="f-q" aria-label="Clear">' + I(IC.x, 16) + '</button>' + '</div>';
   h += seg('beanTab', [['open', 'Open'], ['done', 'Finished'], ['all', 'All']], P.beanTab, 'Show');
   h += '<div class="tools">' + sel('sort', [['recent', 'Recently brewed'], ['rating', 'Highest rated'], ['fresh', 'Freshest roast'], ['cost', 'Cheapest per gram'], ['name', 'Name A–Z']], P.sort, 'Sort by') +
     '<button class="chip sm' + (P.min ? ' on' : '') + '" data-a="pref" data-k="min" data-v="' + (P.min ? 0 : 4) + '" aria-pressed="' + !!P.min + '">' + STAR_S + ' 4 and up</button>' +
@@ -589,7 +589,7 @@ function vBeanForm() {
     '<input type="range" id="f-roast" class="roast" min="1" max="5" step="1" value="' + ri + '" style="--c:' + ROAST_C[ri - 1] + '" aria-valuetext="' + ROASTS[ri - 1] + '">' +
     '<div class="ticks" aria-hidden="true"><span>Light</span><span>Medium</span><span>Dark</span></div></div>';
   h += '<div class="stack"><div class="label">Flavours</div><div class="wrap" id="flv-picked">' + pickedHtml() + '</div>' +
-    '<div class="search sm">' + I(IC.search, 18) + '<input id="f-flv" type="text" placeholder="Find or add a flavour" autocomplete="off" aria-label="Find or add a flavour"></div>' +
+    '<div class="search sm">' + I(IC.search, 18) + '<input id="f-flv" type="text" placeholder="Find or add a flavour" autocomplete="off" aria-label="Find or add a flavour">' + '<button class="x" data-a="clearQ" data-for="f-flv" aria-label="Clear">' + I(IC.x, 16) + '</button>' + '</div>' +
     '<div id="flv-groups">' + flavorGroups('') + '</div></div>';
   h += '<button class="btn" data-a="saveBean">' + I(IC.check) + 'Save</button>';
   if (!isNew) {
@@ -772,15 +772,28 @@ function vRecipe() {
 function vTimer() {
   const D = DR.D, P2 = plan(D), b = bean(D.beanId);
   let h = head('<span style="font-size:20px">' + esc(P2.r.name) + '</span>', esc(b ? b.name : ''), { back: 'back', right: dots(3) });
-  h += '<div class="stack" style="gap:6px;padding-top:4px"><div class="caption" id="t-cap">Ready</div><div class="clock" id="t-clock">0:00</div><div class="action" id="t-act" aria-live="polite"></div></div>';
-  h += '<div class="pour" id="t-pour"><div class="rowb"><span class="gnow" id="t-gnow">0 g</span><span id="t-gto"></span></div><div class="pbar"><i id="t-pb"></i></div></div>';
+  // a dial: the ring fills with the water poured, a mark for each pour's target
+  const R = 112, marks = P2.water ? P2.steps.filter((s) => s.g != null && s.g < P2.water).map((s) => {
+    const a = (s.g / P2.water) * 2 * Math.PI - Math.PI / 2;
+    return '<circle class="tick" cx="' + (120 + R * Math.cos(a)).toFixed(1) + '" cy="' + (120 + R * Math.sin(a)).toFixed(1) + '" r="2.2"/>';
+  }).join('') : '';
+  h += '<div class="dial"><svg class="ring" viewBox="0 0 240 240" aria-hidden="true"><defs>' +
+    '<linearGradient id="rg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F7E1BF"/><stop offset=".5" stop-color="#D9A066"/><stop offset="1" stop-color="#A8683A"/></linearGradient></defs>' +
+    '<circle class="trk" cx="120" cy="120" r="' + R + '"/><circle class="arc" id="t-arc" cx="120" cy="120" r="' + R + '" pathLength="1000" stroke-dasharray="0 1000" transform="rotate(-90 120 120)"/>' +
+    marks + '<circle class="head" id="t-head" cx="120" cy="8" r="4.5"/></svg>' +
+    '<div class="dc"><div class="caption" id="t-cap">Ready</div><div class="clock" id="t-clock">0:00</div>' +
+    '<div class="gnow"><b id="t-gnow">0 g</b><span> / ' + P2.water + ' g</span></div></div></div>';
+  h += '<div class="action" id="t-act" aria-live="polite"></div>';
+  h += '<div class="stats" id="t-stats">' + [1, 2, 3].map((i) => '<div><div class="k" id="t-k' + i + '"></div><div class="v" id="t-v' + i + '"></div></div>').join('') + '</div>';
+  h += '<div class="tsub" id="t-gto"></div>';
   h += '<div class="wrap" id="t-cd" style="justify-content:center;align-items:center"><span class="small muted">Countdown</span>' +
     [3, 5].map((n) => '<button class="chip sm' + (S.countdown === n ? ' on' : '') + '" data-a="setCd" data-n="' + n + '" aria-pressed="' + (S.countdown === n) + '">' + n + 's</button>').join('') + '</div>';
   // steps as a carousel: the current one is centred, finished ones slide off to the left (swipe back to see them)
   h += '<div class="rail" id="t-rail" role="list" aria-label="Steps">' + P2.steps.map((s, i) => '<div class="tstep" id="ts-' + i + '" role="listitem">' +
     '<div class="tm">' + fmt(s.t) + '<i class="ck" aria-label="done">' + I(IC.check, 14) + '</i></div>' +
     '<div class="one tl">' + esc(s.label) + (s.temp != null ? ' <span class="tt">' + s.temp + '°</span>' : '') + '</div>' +
-    '<div class="g">' + (s.g != null ? s.g + ' g' : '&nbsp;') + '</div></div>').join('') + '</div>';
+    '<div class="g">' + (s.g != null ? s.g + ' g' : '&nbsp;') + '</div>' +
+    '<div class="add">' + (s.g != null && s.g > s.from ? '+' + (s.g - s.from) + ' g · ' + s.dur + ' s' : '&nbsp;') + '</div></div>').join('') + '</div>';
   h += '<div class="grow"></div>';
   // controls stay on screen however long the recipe is
   h += '<div class="tctl"><button class="ib" style="justify-self:start;width:56px;height:56px;border-radius:28px" data-a="tReset" aria-label="Restart">' + I(IC.reset) + '</button>' +
@@ -991,7 +1004,7 @@ function vSetup() {
   let h = head(first ? 'Your gear' : 'Brewers', first ? 'Pick what you brew with' : 'Tap to add or remove', { back: first ? null : 'back' });
   if (first) h += scene({ cls: 'intro' });
   if (first) h += '<div class="small muted">Brewing will only show these, with the recipes each one can do. You can change this any time in Gear.</div>';
-  h += '<div class="search">' + I(IC.search, 20) + '<input id="f-cq" type="search" placeholder="Search brewers or brands" autocomplete="off" aria-label="Search brewers"></div>';
+  h += '<div class="search">' + I(IC.search, 20) + '<input id="f-cq" type="search" placeholder="Search brewers or brands" autocomplete="off" aria-label="Search brewers">' + '<button class="x" data-a="clearQ" data-for="f-cq" aria-label="Clear">' + I(IC.x, 16) + '</button>' + '</div>';
   h += '<div id="catalog" class="stack" style="gap:16px">' + catalogHtml('') + '</div>';
   h += '<div class="stack" id="mine">' + mineHtml() + '</div>';
   if (first && !S.grinders.length) {
@@ -1492,7 +1505,6 @@ function render() {
   if (!dark) document.body.classList.remove('brewing', 'pouring');
   const meta = document.querySelector('meta[name=theme-color]');
   if (meta) meta.content = dark ? '#1F140D' : '#F4EEE6';
-  if (!dark) document.getElementById('wave').style.height = '0';
   app.innerHTML = html;
   nav.innerHTML = tab ? navHtml(tab) : '';
   const route = parts.slice(0, 2).join('/');
@@ -1518,20 +1530,7 @@ function railTo(i, smooth) {
   const left = el.offsetLeft - (rail.clientWidth - el.offsetWidth) / 2;
   rail.scrollTo({ left: Math.max(0, left), behavior: smooth && !reduced() ? 'smooth' : 'auto' });
 }
-// coffee in the brewer: depth gradient, crema at the surface, ripples where you pour, bubbles rising, a slow sheen
-function buildWave() {
-  const wave = document.getElementById('wave');
-  if (wave.dataset.built) return;
-  wave.dataset.built = '1';
-  let bub = '';
-  for (let i = 0; i < 12; i++) {
-    const sz = 2 + (i * 7) % 5;
-    bub += '<em style="left:' + (4 + i * 8 + (i * 13) % 5) + '%;width:' + sz + 'px;height:' + sz + 'px;animation-duration:' + (6 + (i * 5) % 6) + 's;animation-delay:-' + ((i * 1.7) % 9).toFixed(1) + 's"></em>';
-  }
-  wave.innerHTML = '<div class="liq"><s class="sheen"></s>' + bub + '</div><div class="surf"><i></i><i></i></div><div class="rips"><b></b><b></b><b></b></div>';
-}
 function initTimer() {
-  buildWave();
   if (!T) T = { phase: 'idle', base: 0, startAt: 0, cdEnd: 0, idx: -1, iv: null, cdShown: null, btn: '', pouring: false };
   T.btn = '';
   paintTimer();
@@ -1565,13 +1564,21 @@ function waterAt(steps, el) {
   }
   return g;
 }
+// the three numbers under the dial: what to pour to, how much is still to add, and how long
+function tStats(rows) {
+  rows.forEach((r, i) => {
+    const k = document.getElementById('t-k' + (i + 1)), v = document.getElementById('t-v' + (i + 1));
+    if (k.textContent !== r[0]) k.textContent = r[0];
+    if (v.textContent !== r[1]) v.textContent = r[1];
+  });
+}
 function paintTimer() {
   if (!T || !DR.D) return;
   const clock = document.getElementById('t-clock');
   if (!clock) return;
   const P2 = plan(DR.D);
-  const cap = document.getElementById('t-cap'), act = document.getElementById('t-act'), wave = document.getElementById('wave');
-  const gnow = document.getElementById('t-gnow'), gto = document.getElementById('t-gto'), pb = document.getElementById('t-pb');
+  const cap = document.getElementById('t-cap'), act = document.getElementById('t-act');
+  const gnow = document.getElementById('t-gnow'), gto = document.getElementById('t-gto');
   document.getElementById('t-cd').hidden = T.phase !== 'idle';
   if (T.phase === 'count') {
     const leftS = Math.ceil((T.cdEnd - Date.now()) / 1000);
@@ -1594,34 +1601,44 @@ function paintTimer() {
   const pouring = T.phase !== 'idle' && cur.g != null && cur.dur > 0 && el < cur.t + cur.dur;
   if (T.phase === 'run' && T.pouring && !pouring) beep(520, 160); // stop pouring
   T.pouring = pouring && T.phase === 'run';
-  wave.style.height = (P2.water ? Math.min(100, water / P2.water * 100) : 0) + '%';
   document.body.classList.toggle('brewing', T.phase === 'run' && water > 0);
   document.body.classList.toggle('pouring', T.phase === 'run' && pouring);
   gnow.textContent = Math.round(water) + ' g';
+  const f = P2.water ? Math.min(1, water / P2.water) : 0, ang = f * 2 * Math.PI - Math.PI / 2;
+  document.getElementById('t-arc').setAttribute('stroke-dasharray', (f * 1000).toFixed(1) + ' 1000');
+  const hd = document.getElementById('t-head');
+  hd.setAttribute('cx', (120 + 112 * Math.cos(ang)).toFixed(1)); hd.setAttribute('cy', (120 + 112 * Math.sin(ang)).toFixed(1));
+  const toGo = Math.max(0, P2.water - Math.round(water));
+  const add = (s) => Math.max(0, s.g - s.from) + ' g';
 
   const over = el >= P2.r.total;
   let say;
   if (T.phase === 'idle') {
     say = (cur.g != null ? cur.label + ' · to ' + cur.g + ' g' : cur.label) + (cur.temp != null ? ' · ' + cur.temp + '°C' : '');
-    gto.textContent = cur.g != null ? 'first pour ' + cur.g + ' g' : ''; pb.style.width = '0';
+    tStats(cur.g != null ? [['Pour to', cur.g + ' g'], ['Add', add(cur)], ['Pour over', cur.dur + ' s']] : [['Water', P2.water + ' g'], ['Steps', String(P2.steps.length)], ['Total', fmt(P2.r.total)]]);
+    gto.textContent = 'Total water ' + P2.water + ' g · ' + fmt(P2.r.total);
     cap.textContent = 'Ready'; setMain('play');
   } else {
     if (pouring) {
       say = cur.label + ' · to ' + cur.g + ' g' + (cur.temp != null ? ' · ' + cur.temp + '°C' : '');
-      gto.textContent = 'target ' + cur.g + ' g';
-      pb.style.width = Math.min(100, (el - cur.t) / cur.dur * 100) + '%';
+      tStats([['Pour to', cur.g + ' g'], ['Still to add', Math.max(0, cur.g - Math.round(water)) + ' g'], ['Time left', Math.max(0, Math.ceil(cur.t + cur.dur - el)) + ' s']]);
     } else if (over) {
-      say = 'Tap Done when it stops'; gto.textContent = ''; pb.style.width = '100%';
+      say = 'Tap Done when it stops';
+      tStats([['Water in', Math.round(water) + ' g'], ['Brew time', fmt(el)], ['Target', fmt(P2.r.total)]]);
+    } else if (nxt && nxt.g != null) {
+      say = cur.g != null ? 'Let it drain' : cur.label;
+      tStats([['Next: pour to', nxt.g + ' g'], ['Add', add(nxt)], ['Starts in', fmt(nxt.t - el)]]);
+    } else if (nxt) {
+      say = cur.g != null ? 'Let it drain' : cur.label;
+      tStats([['Next', nxt.label], ['Water in', Math.round(water) + ' g'], ['In', fmt(nxt.t - el)]]);
     } else {
-      say = cur.g != null ? (nxt ? 'Let it drain' : 'Let it draw down') : cur.label;
-      gto.textContent = nxt ? 'next: ' + nxt.label + (nxt.temp != null ? ' at ' + nxt.temp + '°' : '') + ' in ' + fmt(nxt.t - el) : 'done at ' + fmt(P2.r.total);
-      const a = cur.t + (cur.g != null ? cur.dur : 0), b = nxt ? nxt.t : P2.r.total;
-      pb.style.width = (b > a ? Math.min(100, (el - a) / (b - a) * 100) : 100) + '%';
+      say = cur.g != null ? 'Let it draw down' : cur.label;
+      tStats([['Water in', Math.round(water) + ' g'], ['Draw-down', 'now'], ['Ends in', fmt(P2.r.total - el)]]);
     }
+    gto.textContent = over || !toGo ? 'All ' + P2.water + ' g in' : toGo + ' g of ' + P2.water + ' g still to pour';
     cap.textContent = T.phase === 'paused' ? 'Paused' : (over ? 'Finishing' : pouring ? 'Pour' : 'Wait');
     setMain(T.phase === 'paused' ? 'play' : 'pause');
   }
-  document.getElementById('t-pour').classList.toggle('wait', T.phase !== 'idle' && !pouring);
   if (act.textContent !== say) act.textContent = say;
 }
 function stopTimer() {
@@ -1879,6 +1896,12 @@ const A = {
     D.dose = w.dose; D.ratio = w.ratio; D.temp = w.temp; D.grind = w.grind;
     rerender(); toast('Using last time’s settings');
   },
+  // the × in a search box: empty it and show everything again
+  clearQ: (d) => {
+    const i = document.getElementById(d.for);
+    if (!i) return;
+    i.value = ''; i.dispatchEvent(new Event('input', { bubbles: true })); i.focus();
+  },
   scanBag: () => {
     const i = document.getElementById('scan-in'); if (i) { i.value = ''; i.click(); }
   },
@@ -2032,6 +2055,7 @@ document.addEventListener('keydown', (e) => {
 });
 document.addEventListener('input', (e) => {
   const el = e.target;
+  if (el.parentNode && el.parentNode.classList && el.parentNode.classList.contains('search')) el.parentNode.classList.toggle('has', !!el.value);
   if (el.id === 'f-q') { P.q = el.value; document.getElementById('blist').innerHTML = beansList(); return; }
   if (el.id === 'f-flv') { document.getElementById('flv-groups').innerHTML = flavorGroups(el.value); return; }
   if (el.id === 'f-cq') { document.getElementById('catalog').innerHTML = catalogHtml(el.value); return; }
